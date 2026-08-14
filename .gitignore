@@ -1,0 +1,43 @@
+# Monorepo Root .gitignore
+
+# Dependencies
+**/node_modules/
+**/vendor/
+
+# Environment files
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
+
+# Build outputs
+**/dist/
+**/build/
+**/public/build/
+**/.vite/
+
+# IDE / System files
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+
+# Laravel Specific
+**/storage/*.key
+**/storage/framework/cache/data/*
+**/storage/framework/sessions/*
+**/storage/framework/testing/*
+**/storage/framework/views/*
+**/storage/logs/*
+**/bootstrap/cache/*.php
+
+# Testing & Log files
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/coverage/
+.phpunit.result.cache
