@@ -1,7 +1,123 @@
 @import "tailwindcss";
 
+@theme {
+  --font-serif: 'Domine', Georgia, serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-primary: #755b00;
+  --color-primary-container: #c9a227;
+  --color-on-primary-container: #4b3a00;
+  --color-secondary: #525e7d;
+  --color-surface-container-low: #f5f3ee;
+  --color-surface-container-high: #eae8e3;
+  --color-surface-container-highest: #e4e2dd;
+  --color-surface-variant: #e4e2dd;
+  --color-outline-variant: #d1c5af;
+  --color-on-surface-variant: #4d4635;
+  --color-on-surface: #1b1c19;
+}
+
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 min-h-screen font-sans antialiased;
+    background-color: #EDEBE6;
+    color: #1b1c19;
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
 }
+
+/* Custom Ledger Theme Classes derived from Stitch Design System */
+.input-ledger {
+  background-color: transparent;
+  border-width: 0 0 2px 0;
+  border-color: #d1c5af;
+  border-radius: 0;
+  padding: 0.5rem 0;
+  width: 100%;
+  font-family: var(--font-sans);
+  color: #1b1c19;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.input-ledger:focus {
+  outline: none;
+  border-color: #14213D;
+  box-shadow: none;
+}
+
+.label-ledger {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.05em;
+  color: #4d4635;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #c9a227;
+  color: #14213d;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1.5rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  display: inline-flex;
+  items-center: center;
+  justify-content: center;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 1px solid #14213d;
+  color: #14213d;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1.5rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  display: inline-flex;
+  items-center: center;
+  justify-content: center;
+}
+
+.btn-secondary:hover {
+  background-color: #e4e2dd;
+}
+
+.bg-stone-gray { background-color: #EDEBE6; }
+.bg-off-white { background-color: #F7F6F3; }
+.text-deep-ink { color: #14213D; }
+.border-deep-ink { border-color: #14213D; }
+.shadow-key-tag { box-shadow: 2px 2px 0px 0px rgba(20, 33, 61, 0.1); }
+.border-paper { border: 1px solid #D1CEC5; }
+
+/* Font Utility classes */
+.font-display-lg { font-family: var(--font-serif); font-weight: 700; }
+.font-display-md { font-family: var(--font-serif); font-weight: 700; }
+.font-headline-sm { font-family: var(--font-serif); font-weight: 600; }
+.font-body-md { font-family: var(--font-sans); }
+.font-utility-md { font-family: var(--font-mono); font-weight: 500; }
+.font-utility-sm { font-family: var(--font-mono); font-weight: 500; }
