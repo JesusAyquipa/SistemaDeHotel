@@ -24,7 +24,7 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
-    // Limpiar error específico si el usuario edita el campo
+    // Limpiar error del campo modificado
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
@@ -35,20 +35,60 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
 
   const validateForm = () => {
     const newErrors = {};
+
+    // 1. Validar Nombre (solo letras y espacios)
     if (!formData.name.trim()) {
       newErrors.name = 'El nombre es obligatorio.';
+    } else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(formData.name.trim())) {
+      newErrors.name = 'El nombre solo debe contener letras y espacios (no números ni símbolos).';
     }
+
+    // 2. Validar Apellidos (solo letras y espacios)
     if (!formData.surname.trim()) {
       newErrors.surname = 'Los apellidos son obligatorios.';
+    } else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(formData.surname.trim())) {
+      newErrors.surname = 'Los apellidos solo deben contener letras y espacios (no números ni símbolos).';
     }
+
+    // 3. Validar Número de Documento según el Tipo
     if (!formData.document_number.trim()) {
       newErrors.document_number = 'El número de documento es obligatorio.';
+    } else if (formData.document_type === 'DNI') {
+      if (!/^[0-9]{8}$/.test(formData.document_number.trim())) {
+        newErrors.document_number = 'El DNI debe contener exactamente 8 números.';
+      }
+    } else {
+      if (!/^[a-zA-Z0-9\-]+$/.test(formData.document_number.trim())) {
+        newErrors.document_number = 'El número de documento solo debe contener letras, números o guiones.';
+      }
     }
+
+    // 4. Validar Fecha de Nacimiento (no futura)
+    if (formData.birth_date) {
+      const selectedDate = new Date(formData.birth_date);
+      const today = new Date();
+      if (selectedDate > today) {
+        newErrors.birth_date = 'La fecha de nacimiento no puede ser una fecha futura.';
+      }
+    }
+
+    // 5. Validar Nacionalidad (solo letras si se completa)
+    if (formData.nationality.trim() && !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(formData.nationality.trim())) {
+      newErrors.nationality = 'La nacionalidad solo debe contener letras.';
+    }
+
+    // 6. Validar Teléfono (formato telefónico si se completa)
+    if (formData.phone.trim() && !/^[0-9+\s\-()]{7,20}$/.test(formData.phone.trim())) {
+      newErrors.phone = 'Ingrese un número de teléfono válido (ej. +51 987654321).';
+    }
+
+    // 7. Validar Correo Electrónico
     if (!formData.email.trim()) {
       newErrors.email = 'El correo electrónico es obligatorio.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      newErrors.email = 'Ingrese un correo electrónico válido.';
+      newErrors.email = 'Ingrese una dirección de correo electrónico válida.';
     }
+
     return newErrors;
   };
 
@@ -88,7 +128,7 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
       } else {
         setGeneralError(
           err.response?.data?.message ||
-            'No se pudo conectar con el servidor backend (http://localhost:8000). Asegúrese de que el servidor Laravel esté corriendo.'
+            'Error de conexión con la Base de Datos o el servidor Backend. Verifique que la extensión pdo_mysql esté activa en PHP.'
         );
       }
     } finally {
@@ -163,10 +203,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
               </select>
             </div>
 
-            {/* Campo DNI con validación visual */}
+            {/* Campo DNI / Documento con validación */}
             <div>
               <label className={`label-ledger ${errors.document_number ? 'text-[#7A2E2E]' : ''}`}>
-                Número de Documento (DNI) *
+                Número de Documento ({formData.document_type}) *
               </label>
               <input
                 className={`input-ledger ${
@@ -178,7 +218,7 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
                 name="document_number"
                 value={formData.document_number}
                 onChange={handleChange}
-                placeholder="Ej. 73829102"
+                placeholder={formData.document_type === 'DNI' ? 'Ej. 73829102 (8 dígitos)' : 'Ej. P-123456'}
               />
               {errors.document_number && (
                 <p className="text-[#7A2E2E] font-mono text-xs mt-1">
@@ -188,26 +228,36 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className="label-ledger">Fecha de Nacimiento</label>
+              <label className={`label-ledger ${errors.birth_date ? 'text-[#7A2E2E]' : ''}`}>
+                Fecha de Nacimiento
+              </label>
               <input
-                className="input-ledger"
+                className={`input-ledger ${errors.birth_date ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="date"
                 name="birth_date"
                 value={formData.birth_date}
                 onChange={handleChange}
               />
+              {errors.birth_date && (
+                <p className="text-[#7A2E2E] font-mono text-xs mt-1">{errors.birth_date}</p>
+              )}
             </div>
 
             <div>
-              <label className="label-ledger">Nacionalidad</label>
+              <label className={`label-ledger ${errors.nationality ? 'text-[#7A2E2E]' : ''}`}>
+                Nacionalidad
+              </label>
               <input
-                className="input-ledger"
+                className={`input-ledger ${errors.nationality ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="text"
                 name="nationality"
                 value={formData.nationality}
                 onChange={handleChange}
                 placeholder="Ej. Peruana / Británica"
               />
+              {errors.nationality && (
+                <p className="text-[#7A2E2E] font-mono text-xs mt-1">{errors.nationality}</p>
+              )}
             </div>
           </div>
         </div>
@@ -221,15 +271,20 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div>
-              <label className="label-ledger">Teléfono de Contacto</label>
+              <label className={`label-ledger ${errors.phone ? 'text-[#7A2E2E]' : ''}`}>
+                Teléfono de Contacto
+              </label>
               <input
-                className="input-ledger"
+                className={`input-ledger ${errors.phone ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="Ej. +51 987654321"
               />
+              {errors.phone && (
+                <p className="text-[#7A2E2E] font-mono text-xs mt-1">{errors.phone}</p>
+              )}
             </div>
 
             <div>
