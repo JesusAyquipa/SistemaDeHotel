@@ -17,7 +17,7 @@ export default function StaffSidebar() {
       <div className="mb-6 p-2 flex items-center justify-between">
         <Link to="/" className="no-underline">
           <h1 className="font-serif font-bold text-xl tracking-tight text-[#1b1c19]">
-            THE GRAND LEDGER
+            Sheraton Lima
           </h1>
           <span className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider block">
             Sistema Hotelero
@@ -56,11 +56,10 @@ export default function StaffSidebar() {
             <Link
               to="/recepcionista/habitaciones"
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${
-                activePath.includes('/habitaciones')
+              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/habitaciones')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
                   : 'text-[#4d4635] hover:bg-[#eae8e3]'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">door_front</span>
               <span className="font-mono text-xs uppercase tracking-wider">Habitaciones</span>
@@ -70,11 +69,10 @@ export default function StaffSidebar() {
             <Link
               to="/recepcionista/reservas"
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${
-                activePath.includes('/reservas')
+              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reservas')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
                   : 'text-[#4d4635] hover:bg-[#eae8e3]'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">calendar_month</span>
               <span className="font-mono text-xs uppercase tracking-wider">Reservas</span>
@@ -84,11 +82,10 @@ export default function StaffSidebar() {
             <Link
               to="/recepcionista/huespedes/nuevo"
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${
-                activePath.includes('/huespedes')
+              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/huespedes')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00] shadow-sm'
                   : 'text-[#4d4635] hover:bg-[#eae8e3]'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">group</span>
               <span className="font-mono text-xs uppercase tracking-wider font-semibold">Huéspedes</span>
@@ -98,11 +95,10 @@ export default function StaffSidebar() {
             <Link
               to="/recepcionista/reportes"
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${
-                activePath.includes('/reportes')
+              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reportes')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
                   : 'text-[#4d4635] hover:bg-[#eae8e3]'
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined">analytics</span>
               <span className="font-mono text-xs uppercase tracking-wider">Reportes</span>
@@ -168,9 +164,8 @@ export default function StaffSidebar() {
 
       {/* Sidebar Móvil (Drawer Deslizante) */}
       <div
-        className={`md:hidden fixed top-0 left-0 bottom-0 z-50 transform transition-transform duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`md:hidden fixed top-0 left-0 bottom-0 z-50 transform transition-transform duration-300 ease-in-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         {navContent}
       </div>
