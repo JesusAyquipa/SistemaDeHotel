@@ -15,11 +15,11 @@ class StoreGuestRequest extends FormRequest
     }
 
     /**
-     * Reglas de validación estrictas para el registro de huéspedes.
+     * Reglas de validación estrictas para el registro de huéspedes en la tabla `guests`.
      */
     public function rules(): array
     {
-        $documentRules = ['required', 'string', 'max:50', 'unique:users,document_number'];
+        $documentRules = ['required', 'string', 'max:50', 'unique:guests,document_number'];
 
         // Validación según el tipo de documento seleccionado
         if ($this->input('document_type') === 'DNI') {
@@ -36,7 +36,7 @@ class StoreGuestRequest extends FormRequest
             'birth_date'      => ['nullable', 'date', 'before_or_equal:today'],
             'nationality'     => ['nullable', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/'],
             'phone'           => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\s\-()]*$/'],
-            'email'           => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email'           => ['required', 'email', 'max:255', 'unique:guests,email'],
             'address'         => ['nullable', 'string', 'max:255'],
             'notes'           => ['nullable', 'string'],
         ];

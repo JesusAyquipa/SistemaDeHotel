@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -21,15 +20,7 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'surname',
-        'document_type',
-        'document_number',
-        'birth_date',
-        'nationality',
-        'phone',
         'email',
-        'address',
-        'notes',
         'password',
         'is_active',
     ];
@@ -58,8 +49,11 @@ class User extends Authenticatable
         ];
     }
 
-    public function bookings()
+    /**
+     * Ficha de huésped vinculada a esta cuenta de usuario (opcional)
+     */
+    public function guestProfile()
     {
-        return $this->hasMany(Booking::class);
+        return $this->hasOne(Guest::class);
     }
 }

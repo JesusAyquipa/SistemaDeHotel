@@ -13,9 +13,8 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
-            // Estructura base inicial (los campos se agregarán en los siguientes Sprints)
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('room_id')->constrained()->onDelete('cascade');
+            $table->foreignId('guest_id')->constrained('guests')->onDelete('cascade');
+            $table->foreignId('room_id')->constrained('rooms')->onDelete('cascade');
             $table->date('check_in');
             $table->date('check_out');
             $table->decimal('total_amount', 10, 2);
