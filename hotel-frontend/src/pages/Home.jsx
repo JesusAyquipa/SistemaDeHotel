@@ -18,8 +18,14 @@ export default function Home() {
           </p>
           <div className="mt-6 flex flex-wrap gap-4">
             <Link
+              to="/recepcionista/huespedes/nuevo"
+              className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-sm transition shadow-amber-500/30 shadow-lg flex items-center gap-2"
+            >
+              <span>🏨</span> Ver Pantalla: Registrar Huésped (Ledger UI)
+            </Link>
+            <Link
               to="/ping"
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-sm transition shadow-indigo-600/30 shadow-lg flex items-center gap-2"
+              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-sm transition border border-slate-700 flex items-center gap-2"
             >
               <span>🚀</span> Probar Conexión API (/api/ping)
             </Link>
@@ -53,7 +59,7 @@ export default function Home() {
               <span className="text-emerald-400">✓</span> Laravel Reverb WebSockets
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Migraciones iniciales (rooms, bookings, payments)
+              <span className="text-emerald-400">✓</span> Migraciones iniciales (rooms, bookings, payments, staff)
             </li>
           </ul>
         </div>
@@ -70,19 +76,19 @@ export default function Home() {
           </div>
           <ul className="space-y-2 text-sm text-slate-300">
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Tailwind CSS v4 Configurado
+              <span className="text-emerald-400">✓</span> Tailwind CSS v4 + Tema Stitch Integardo
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Axios con BaseURL (http://localhost:8000/api)
+              <span className="text-emerald-400">✓</span> Pantalla /recepcionista/huespedes/nuevo
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Laravel Echo & WebSockets Client
+              <span className="text-emerald-400">✓</span> Componentes Reutilizables (Sidebar, Toast, Form)
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> React Router DOM
+              <span className="text-emerald-400">✓</span> Menú Hamburguesa Responsive en Móvil
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Estructura modular (components, pages, services, context)
+              <span className="text-emerald-400">✓</span> 100% Traducido al Español
             </li>
           </ul>
         </div>

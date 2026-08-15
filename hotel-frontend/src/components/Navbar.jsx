@@ -4,17 +4,19 @@ export default function Navbar({ pingStatus }) {
   return (
     <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between shadow-lg">
       <div className="flex items-center space-x-3">
-        <div className="bg-indigo-600 p-2 rounded-xl text-white font-bold text-xl shadow-indigo-500/20 shadow-lg">
-          🏨
-        </div>
-        <div>
-          <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-            HotelReservas
-          </span>
-          <span className="text-xs ml-2 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-            Monorepo Architecture
-          </span>
-        </div>
+        <Link to="/" className="flex items-center space-x-3">
+          <div className="bg-indigo-600 p-2 rounded-xl text-white font-bold text-xl shadow-indigo-500/20 shadow-lg">
+            🏨
+          </div>
+          <div>
+            <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+              HotelReservas
+            </span>
+            <span className="text-xs ml-2 px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+              Monorepo Architecture
+            </span>
+          </div>
+        </Link>
       </div>
 
       <div className="flex items-center space-x-6">
