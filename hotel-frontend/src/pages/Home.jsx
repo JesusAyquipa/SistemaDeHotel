@@ -14,20 +14,26 @@ export default function Home() {
             Sistema de Gestión de Reservas de Hotel
           </h1>
           <p className="text-slate-300 mt-3 text-base leading-relaxed">
-            Monorepo académico listo con <span className="text-indigo-400 font-semibold">Laravel 11 API REST</span> en el backend y <span className="text-cyan-400 font-semibold">React + Vite SPA</span> en el frontend.
+            Monorepo académico con <span className="text-indigo-400 font-semibold">Laravel 11 API REST</span> en el backend y <span className="text-cyan-400 font-semibold">React + Vite SPA</span> en el frontend.
           </p>
           <div className="mt-6 flex flex-wrap gap-4">
+            <Link
+              to="/habitaciones"
+              className="px-6 py-3 bg-[#c9a227] hover:bg-[#ffe08e] text-slate-950 rounded-xl font-bold text-sm transition shadow-amber-500/30 shadow-lg flex items-center gap-2"
+            >
+              <span>🛏️</span> Catálogo de Habitaciones (/habitaciones)
+            </Link>
             <Link
               to="/recepcionista/huespedes/nuevo"
               className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-sm transition shadow-amber-500/30 shadow-lg flex items-center gap-2"
             >
-              <span>🏨</span> Ver Pantalla: Registrar Huésped (Ledger UI)
+              <span>🏨</span> Registrar Huésped (Staff)
             </Link>
             <Link
               to="/ping"
               className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-sm transition border border-slate-700 flex items-center gap-2"
             >
-              <span>🚀</span> Probar Conexión API (/api/ping)
+              <span>🚀</span> Probar API (/api/ping)
             </Link>
           </div>
         </div>
@@ -47,19 +53,16 @@ export default function Home() {
           </div>
           <ul className="space-y-2 text-sm text-slate-300">
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Laravel Sanctum (Autenticación SPA)
+              <span className="text-emerald-400">✓</span> GET /api/rooms/available (Disponibilidad por fechas y filtros)
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Spatie Permission (admin, recepcionista, cliente)
+              <span className="text-emerald-400">✓</span> POST /api/guests (Registro de huéspedes sin password)
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> MySQL Configurado (3306)
+              <span className="text-emerald-400">✓</span> Seeders con 8 habitaciones variadas
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Laravel Reverb WebSockets
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Migraciones iniciales (rooms, bookings, payments, staff)
+              <span className="text-emerald-400">✓</span> Tests PHPUnit en base de datos dedicada (MySQL)
             </li>
           </ul>
         </div>
@@ -76,19 +79,16 @@ export default function Home() {
           </div>
           <ul className="space-y-2 text-sm text-slate-300">
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Tailwind CSS v4 + Tema Stitch Integardo
+              <span className="text-emerald-400">✓</span> Catálogo completo en <code>/habitaciones</code>
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Pantalla /recepcionista/huespedes/nuevo
+              <span className="text-emerald-400">✓</span> Búsqueda por rango de fechas (Check In / Check Out)
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Componentes Reutilizables (Sidebar, Toast, Form)
+              <span className="text-emerald-400">✓</span> Filtros reactivos por tipo de cama y capacidad mínima
             </li>
             <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> Menú Hamburguesa Responsive en Móvil
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> 100% Traducido al Español
+              <span className="text-emerald-400">✓</span> Estados de carga (Skeleton) y vacío estilizados
             </li>
           </ul>
         </div>

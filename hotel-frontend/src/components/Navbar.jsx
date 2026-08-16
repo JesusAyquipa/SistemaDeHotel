@@ -23,6 +23,12 @@ export default function Navbar({ pingStatus }) {
         <Link to="/" className="text-slate-300 hover:text-white transition font-medium text-sm">
           Inicio
         </Link>
+        <Link to="/habitaciones" className="text-amber-400 hover:text-amber-300 transition font-semibold text-sm">
+          🛏️ Habitaciones
+        </Link>
+        <Link to="/recepcionista/huespedes/nuevo" className="text-slate-300 hover:text-white transition font-medium text-sm">
+          Panel Recepción
+        </Link>
         <Link to="/ping" className="text-slate-300 hover:text-white transition font-medium text-sm">
           Test Conexión API
         </Link>

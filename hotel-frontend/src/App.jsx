@@ -6,10 +6,11 @@ import AppRoutes from './routes/AppRoutes';
 function MainLayout({ children, pingStatus }) {
   const location = useLocation();
 
-  // Si la ruta es del panel de recepcionista o staff (RegisterGuest), no muestra el navbar genérico
+  // Si la ruta es del panel de recepcionista o staff, o la página de catálogo con su propio PublicHeader/PublicFooter
   const isStaffRoute = location.pathname.startsWith('/recepcionista') || location.pathname.startsWith('/staff');
+  const isStandalonePublicRoute = location.pathname.startsWith('/habitaciones');
 
-  if (isStaffRoute) {
+  if (isStaffRoute || isStandalonePublicRoute) {
     return <>{children}</>;
   }
 
