@@ -13,11 +13,15 @@ return new class extends Migration
     {
         Schema::create('rooms', function (Blueprint $table) {
             $table->id();
-            // Estructura base inicial (los campos se agregarán en los siguientes Sprints)
             $table->string('room_number')->unique();
-            $table->string('room_type'); // ej: Simple, Doble, Suite
-            $table->decimal('price_per_night', 10, 2);
-            $table->string('status')->default('available'); // available, occupied, maintenance
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->string('bed_type');           // individual, doble, king
+            $table->integer('capacity');           // número de huéspedes
+            $table->integer('size_m2')->nullable(); // metros cuadrados
+            $table->decimal('price_per_night', 8, 2);
+            $table->string('image_url')->nullable();
+            $table->string('status')->default('disponible'); // disponible, mantenimiento, inactiva
             $table->timestamps();
         });
     }

@@ -11,11 +11,19 @@ class Room extends Model
 
     protected $fillable = [
         'room_number',
-        'room_type',
+        'name',
+        'description',
+        'bed_type',
+        'capacity',
+        'size_m2',
         'price_per_night',
+        'image_url',
         'status',
     ];
 
+    /**
+     * Relación con las reservas de esta habitación.
+     */
     public function bookings()
     {
         return $this->hasMany(Booking::class);
