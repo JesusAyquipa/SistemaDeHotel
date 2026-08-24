@@ -188,4 +188,106 @@ class RoomAvailabilityTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonMissing(['room_number' => '501']);
     }
+
+    /**
+     * Filtrar por rango de precios (min_price y max_price).
+     */
+    public function test_filter_by_price_range_returns_correct_rooms(): void
+    {
+        Room::create([
+            'room_number'     => '601',
+            'name'            => 'Económica',
+            'bed_type'        => 'individual',
+            'capacity'        => 1,
+            'price_per_night' => 150.00,
+            'status'          => 'disponible',
+        ]);
+
+        Room::create([
+            'room_number'     => '602',
+            'name'            => 'Media',
+            'bed_type'        => 'doble',
+            'capacity'        => 2,
+            'price_per_night' => 300.00,
+            'status'          => 'disponible',
+        ]);
+
+        Room::create([
+            'room_number'     => '603',
+            'name'            => 'Lujo',
+            'bed_type'        => 'king',
+            'capacity'        => 2,
+            'price_per_night' => 600.00,
+            'status'          => 'disponible',
+        ]);
+
+        // Filtrar entre 200 y 500
+        $response = $this->getJson('/api/rooms/available?min_price=200&max_price=500');
+
+        $response->assertStatus(200);
+        $response->assertJsonFragment(['room_number' => '602']);
+        $response->assertJsonMissing(['room_number' => '601']);
+        $response->assertJsonMissing(['room_number' => '603']);
+    }
+
+    /**
+     * Ordenamiento por precio descendente.
+     */
+    public function test_sort_by_price_desc_orders_correctly(): void
+    {
+        Room::create([
+            'room_number'     => '701',
+            'name'            => 'Barata',
+            'bed_type'        => 'individual',
+            'capacity'        => 1,
+            'price_per_night' => 100.00,
+            'status'          => 'disponible',
+        ]);
+
+        Room::create([
+            'room_number'     => '702',
+            'name'            => 'Cara',
+            'bed_type'        => 'king',
+            'capacity'        => 2,
+            'price_per_night' => 900.00,
+            'status'          => 'disponible',
+        ]);
+
+        $response = $this->getJson('/api/rooms/available?sort_by=price_desc');
+
+        $response->assertStatus(200);
+        $data = $response->json();
+        $this->assertEquals('702', $data[0]['room_number']);
+        $this->assertEquals('701', $data[1]['room_number']);
+    }
+
+    /**
+     * Búsqueda por término de palabra clave.
+     */
+    public function test_search_by_keyword_filters_by_name_or_description(): void
+    {
+        Room::create([
+            'room_number'     => '801',
+            'name'            => 'Suite Presidencial con Balcón',
+            'bed_type'        => 'king',
+            'capacity'        => 4,
+            'price_per_night' => 800.00,
+            'status'          => 'disponible',
+        ]);
+
+        Room::create([
+            'room_number'     => '802',
+            'name'            => 'Habitación Simple Jardín',
+            'bed_type'        => 'individual',
+            'capacity'        => 1,
+            'price_per_night' => 150.00,
+            'status'          => 'disponible',
+        ]);
+
+        $response = $this->getJson('/api/rooms/available?search=Presidencial');
+
+        $response->assertStatus(200);
+        $response->assertJsonFragment(['room_number' => '801']);
+        $response->assertJsonMissing(['room_number' => '802']);
+    }
 }

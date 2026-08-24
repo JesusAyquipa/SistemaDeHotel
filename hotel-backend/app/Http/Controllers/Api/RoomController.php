@@ -36,7 +36,7 @@ class RoomController extends Controller
             }
         }
 
-        $query = Room::where('status', 'disponible');
+        $query = Room::where('status', '!=', 'mantenimiento');
 
         // Filtrar habitaciones ocupadas en el rango de fechas indicado
         if ($request->filled('check_in') && $request->filled('check_out')) {
@@ -46,21 +46,59 @@ class RoomController extends Controller
             $query->whereDoesntHave('bookings', function ($q) use ($checkIn, $checkOut) {
                 $q->where('check_in', '<', $checkOut)
                   ->where('check_out', '>', $checkIn)
-                  ->where('status', 'confirmada');
+                  ->whereIn('status', ['confirmed', 'confirmada', 'reservada', 'checked_in']);
             });
         }
 
-        // Filtro por tipo de cama
-        if ($request->filled('bed_type')) {
+        // Filtro por tipo de cama / habitación
+        if ($request->filled('bed_type') && $request->query('bed_type') !== 'todos') {
             $query->where('bed_type', $request->query('bed_type'));
         }
 
         // Filtro por capacidad mínima
-        if ($request->filled('capacity')) {
+        if ($request->filled('capacity') && (int) $request->query('capacity') > 0) {
             $query->where('capacity', '>=', (int) $request->query('capacity'));
         }
 
-        $rooms = $query->orderBy('price_per_night')->get();
+        // Filtro por precio mínimo
+        if ($request->filled('min_price')) {
+            $query->where('price_per_night', '>=', (float) $request->query('min_price'));
+        }
+
+        // Filtro por precio máximo
+        if ($request->filled('max_price')) {
+            $query->where('price_per_night', '<=', (float) $request->query('max_price'));
+        }
+
+        // Búsqueda por palabra clave o nombre de habitación
+        if ($request->filled('search')) {
+            $searchTerm = '%' . $request->query('search') . '%';
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', $searchTerm)
+                  ->orWhere('description', 'like', $searchTerm)
+                  ->orWhere('room_number', 'like', $searchTerm);
+            });
+        }
+
+        // Ordenamiento
+        $sortBy = $request->query('sort_by', 'price_asc');
+        switch ($sortBy) {
+            case 'price_desc':
+                $query->orderByDesc('price_per_night');
+                break;
+            case 'capacity_desc':
+                $query->orderByDesc('capacity');
+                break;
+            case 'size_desc':
+                $query->orderByDesc('size_m2');
+                break;
+            case 'price_asc':
+            default:
+                $query->orderBy('price_per_night');
+                break;
+        }
+
+        $rooms = $query->get();
 
         return response()->json($rooms);
     }

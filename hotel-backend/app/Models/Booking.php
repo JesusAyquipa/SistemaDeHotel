@@ -19,6 +19,15 @@ class Booking extends Model
         'status',
     ];
 
+    protected static function booted()
+    {
+        static::creating(function ($booking) {
+            if (empty($booking->booking_code)) {
+                $booking->booking_code = 'RES-' . strtoupper(\Illuminate\Support\Str::random(8));
+            }
+        });
+    }
+
     public function guest()
     {
         return $this->belongsTo(Guest::class);
