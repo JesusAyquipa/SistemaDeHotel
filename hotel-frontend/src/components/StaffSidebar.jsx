@@ -104,6 +104,19 @@ export default function StaffSidebar() {
               <span className="font-mono text-xs uppercase tracking-wider">Reportes</span>
             </Link>
           </li>
+          <li>
+            <Link
+              to="/recepcionista/personal"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/personal')
+                  ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                  : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                }`}
+            >
+              <span className="material-symbols-outlined">manage_accounts</span>
+              <span className="font-mono text-xs uppercase tracking-wider">Personal</span>
+            </Link>
+          </li>
         </ul>
       </div>
 
