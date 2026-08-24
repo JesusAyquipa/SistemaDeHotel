@@ -28,6 +28,10 @@ export default function RoomsListing() {
   const [filters, setFilters] = useState({
     bed_type: 'todos',
     capacity: '',
+    min_price: '',
+    max_price: '',
+    sort_by: 'price_asc',
+    search: '',
   });
 
   // Función para consultar la API con los parámetros activos
@@ -40,6 +44,10 @@ export default function RoomsListing() {
         check_out: currentSearch.check_out,
         bed_type: currentFilters.bed_type !== 'todos' ? currentFilters.bed_type : undefined,
         capacity: currentFilters.capacity || currentSearch.capacity || undefined,
+        min_price: currentFilters.min_price || undefined,
+        max_price: currentFilters.max_price || undefined,
+        sort_by: currentFilters.sort_by || undefined,
+        search: currentFilters.search || undefined,
       };
 
       const data = await getAvailableRooms(query);
@@ -204,11 +212,20 @@ export default function RoomsListing() {
                 <button
                   type="button"
                   onClick={() => {
-                    setSearchParams({ check_in: '', check_out: '', capacity: '1' });
-                    setFilters({ bed_type: 'todos', capacity: '' });
-                    fetchRooms({ check_in: '', check_out: '', capacity: '1' }, { bed_type: 'todos', capacity: '' });
+                    const defaultSearch = { check_in: '', check_out: '', capacity: '1' };
+                    const defaultFilters = {
+                      bed_type: 'todos',
+                      capacity: '',
+                      min_price: '',
+                      max_price: '',
+                      sort_by: 'price_asc',
+                      search: '',
+                    };
+                    setSearchParams(defaultSearch);
+                    setFilters(defaultFilters);
+                    fetchRooms(defaultSearch, defaultFilters);
                   }}
-                  className="bg-[#c9a227] text-[#14213d] font-mono text-xs uppercase px-6 py-3 font-bold hover:brightness-105 transition-all shadow-sm"
+                  className="bg-[#c9a227] text-[#14213d] font-mono text-xs uppercase px-6 py-3 font-bold hover:brightness-105 transition-all shadow-sm cursor-pointer"
                 >
                   Ver Todas las Habitaciones
                 </button>

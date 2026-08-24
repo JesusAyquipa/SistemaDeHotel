@@ -12,6 +12,10 @@ export const getAvailableRooms = async (params = {}) => {
   if (params.check_out) cleanParams.check_out = params.check_out;
   if (params.bed_type && params.bed_type !== 'todos') cleanParams.bed_type = params.bed_type;
   if (params.capacity && Number(params.capacity) > 0) cleanParams.capacity = params.capacity;
+  if (params.min_price && Number(params.min_price) >= 0) cleanParams.min_price = params.min_price;
+  if (params.max_price && Number(params.max_price) > 0) cleanParams.max_price = params.max_price;
+  if (params.sort_by) cleanParams.sort_by = params.sort_by;
+  if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
 
   const response = await api.get('/rooms/available', {
     params: cleanParams,
