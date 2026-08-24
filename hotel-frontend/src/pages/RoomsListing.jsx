@@ -4,12 +4,18 @@ import PublicFooter from '../components/PublicFooter';
 import AvailabilitySearch from '../components/AvailabilitySearch';
 import RoomFilters from '../components/RoomFilters';
 import RoomCard from '../components/RoomCard';
+import BookingSummaryModal from '../components/BookingSummaryModal';
+import BookingSuccessModal from '../components/BookingSuccessModal';
 import { getAvailableRooms } from '../services/rooms';
 
 export default function RoomsListing() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Estados para el flujo de reserva
+  const [selectedRoomForBooking, setSelectedRoomForBooking] = useState(null);
+  const [bookingSuccessData, setBookingSuccessData] = useState(null);
 
   // Parámetros de búsqueda por fechas y huéspedes
   const [searchParams, setSearchParams] = useState({
@@ -174,7 +180,7 @@ export default function RoomsListing() {
                     key={room.id}
                     room={room}
                     onSelect={(selectedRoom) => {
-                      alert(`Has seleccionado la ${selectedRoom.name} (Hab. ${selectedRoom.room_number}). Próximamente: Continuar con el proceso de reserva.`);
+                      setSelectedRoomForBooking(selectedRoom);
                     }}
                   />
                 ))}
@@ -213,6 +219,32 @@ export default function RoomsListing() {
       </main>
 
       <PublicFooter />
+
+      {/* Modal 1: Resumen de la Reserva antes de confirmar */}
+      {selectedRoomForBooking && (
+        <BookingSummaryModal
+          room={selectedRoomForBooking}
+          initialDates={{
+            check_in: searchParams.check_in,
+            check_out: searchParams.check_out,
+          }}
+          onClose={() => setSelectedRoomForBooking(null)}
+          onBookingSuccess={(result) => {
+            setSelectedRoomForBooking(null);
+            setBookingSuccessData(result);
+            // Actualizar catálogo de habitaciones para reflejar el nuevo estado de la habitación
+            fetchRooms(searchParams, filters);
+          }}
+        />
+      )}
+
+      {/* Modal 2: Pantalla de Éxito / Voucher con Código Único */}
+      {bookingSuccessData && (
+        <BookingSuccessModal
+          bookingResult={bookingSuccessData}
+          onClose={() => setBookingSuccessData(null)}
+        />
+      )}
     </div>
   );
 }
