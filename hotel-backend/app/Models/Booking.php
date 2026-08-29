@@ -42,4 +42,12 @@ class Booking extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    /**
+     * Obtiene el pago más reciente asociado a esta reserva.
+     */
+    public function latestPayment()
+    {
+        return $this->hasOne(Payment::class)->latestOfMany();
+    }
 }

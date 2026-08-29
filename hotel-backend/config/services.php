@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pasarela de Pago del Hotel
+    |--------------------------------------------------------------------------
+    | Opciones: 'simulation' (default, para desarrollo/tests), 'stripe'
+    */
+    'payment_gateway' => env('PAYMENT_GATEWAY', 'simulation'),
+
+    'stripe' => [
+        'key'            => env('STRIPE_PUBLISHABLE_KEY', ''),
+        'secret'         => env('STRIPE_SECRET_KEY', ''),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET', ''),
+    ],
+
 ];
