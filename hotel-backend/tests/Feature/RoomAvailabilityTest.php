@@ -190,6 +190,37 @@ class RoomAvailabilityTest extends TestCase
     }
 
     /**
+     * Habitaciones con estado 'reservada', 'ocupada' o 'mantenimiento'
+     * NO aparecen en el catálogo público de habitaciones disponibles.
+     */
+    public function test_rooms_with_non_available_statuses_are_not_returned(): void
+    {
+        Room::create([
+            'room_number'     => '502',
+            'name'            => 'Habitación Reservada por Recepción',
+            'bed_type'        => 'king',
+            'capacity'        => 2,
+            'price_per_night' => 300.00,
+            'status'          => 'reservada',
+        ]);
+
+        Room::create([
+            'room_number'     => '503',
+            'name'            => 'Habitación Ocupada',
+            'bed_type'        => 'doble',
+            'capacity'        => 2,
+            'price_per_night' => 220.00,
+            'status'          => 'ocupada',
+        ]);
+
+        $response = $this->getJson('/api/rooms/available');
+
+        $response->assertStatus(200);
+        $response->assertJsonMissing(['room_number' => '502']);
+        $response->assertJsonMissing(['room_number' => '503']);
+    }
+
+    /**
      * Filtrar por rango de precios (min_price y max_price).
      */
     public function test_filter_by_price_range_returns_correct_rooms(): void
