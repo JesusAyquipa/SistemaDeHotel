@@ -4,8 +4,8 @@ import PublicFooter from '../components/PublicFooter';
 import AvailabilitySearch from '../components/AvailabilitySearch';
 import RoomFilters from '../components/RoomFilters';
 import RoomCard from '../components/RoomCard';
-import BookingSummaryModal from '../components/BookingSummaryModal';
-import BookingSuccessModal from '../components/BookingSuccessModal';
+import CheckoutModal from '../components/CheckoutModal';
+import PaymentReceiptModal from '../components/PaymentReceiptModal';
 import { getAvailableRooms } from '../services/rooms';
 
 export default function RoomsListing() {
@@ -13,9 +13,9 @@ export default function RoomsListing() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Estados para el flujo de reserva
+  // Estados para el flujo de reserva y checkout
   const [selectedRoomForBooking, setSelectedRoomForBooking] = useState(null);
-  const [bookingSuccessData, setBookingSuccessData] = useState(null);
+  const [activeReceiptBookingCode, setActiveReceiptBookingCode] = useState(null);
 
   // Parámetros de búsqueda por fechas y huéspedes
   const [searchParams, setSearchParams] = useState({
@@ -61,7 +61,7 @@ export default function RoomsListing() {
     }
   }, []);
 
-  // Al montar el componente, cargar todas las habitaciones disponibles por defecto (sin fechas requeridas)
+  // Al montar el componente, cargar todas las habitaciones disponibles por defecto
   useEffect(() => {
     fetchRooms(searchParams, filters);
   }, []);
@@ -72,7 +72,7 @@ export default function RoomsListing() {
     fetchRooms(newSearch, filters);
   };
 
-  // Handler cuando cambian los filtros visuales (tipo de cama, capacidad)
+  // Handler cuando cambian los filtros visuales
   const handleFilterChange = (key, value) => {
     const updatedFilters = {
       ...filters,
@@ -112,7 +112,7 @@ export default function RoomsListing() {
             </div>
           </div>
 
-          {/* Barra de Búsqueda de Disponibilidad (The Ledger Strip) */}
+          {/* Barra de Búsqueda de Disponibilidad */}
           <div className="relative -mt-10 sm:-mt-12 z-20 mx-auto max-w-4xl px-2 sm:px-4">
             <AvailabilitySearch
               searchParams={searchParams}
@@ -237,31 +237,35 @@ export default function RoomsListing() {
 
       <PublicFooter />
 
-      {/* Modal 1: Resumen de la Reserva antes de confirmar */}
+      {/* Modal de Checkout Seguro y Pago en Línea */}
       {selectedRoomForBooking && (
-        <BookingSummaryModal
+        <CheckoutModal
           room={selectedRoomForBooking}
           initialDates={{
             check_in: searchParams.check_in,
             check_out: searchParams.check_out,
           }}
           onClose={() => setSelectedRoomForBooking(null)}
-          onBookingSuccess={(result) => {
+          onPaymentSuccess={(result) => {
+            const code = result?.booking_code || result?.booking?.booking_code;
             setSelectedRoomForBooking(null);
-            setBookingSuccessData(result);
-            // Actualizar catálogo de habitaciones para reflejar el nuevo estado de la habitación
+            if (code) {
+              setActiveReceiptBookingCode(code);
+            }
+            // Recargar catálogo para refrescar disponibilidades
             fetchRooms(searchParams, filters);
           }}
         />
       )}
 
-      {/* Modal 2: Pantalla de Éxito / Voucher con Código Único */}
-      {bookingSuccessData && (
-        <BookingSuccessModal
-          bookingResult={bookingSuccessData}
-          onClose={() => setBookingSuccessData(null)}
+      {/* Modal de Comprobante Digital de Pago (Voucher / Recibo Imprimible) */}
+      {activeReceiptBookingCode && (
+        <PaymentReceiptModal
+          bookingCode={activeReceiptBookingCode}
+          onClose={() => setActiveReceiptBookingCode(null)}
         />
       )}
     </div>
   );
 }
+
