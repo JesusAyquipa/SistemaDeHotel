@@ -5,7 +5,7 @@ use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\RoomController;
 
 // Rutas de Cuentas de Personal y Gestión de Inventario
-Route::prefix('staff')->group(function () {
+Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
     // Gestión de Inventario y Estado de Habitaciones (Recepcionista/Admin)
     Route::get('/rooms', [RoomController::class, 'indexStaff']);
     Route::post('/rooms', [RoomController::class, 'store']);

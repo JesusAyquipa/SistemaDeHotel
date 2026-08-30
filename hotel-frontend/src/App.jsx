@@ -8,7 +8,7 @@ function MainLayout({ children, pingStatus }) {
 
   // Si la ruta es del panel de recepcionista o staff, o la página de catálogo con su propio PublicHeader/PublicFooter
   const isStaffRoute = location.pathname.startsWith('/recepcionista') || location.pathname.startsWith('/staff');
-  const isStandalonePublicRoute = location.pathname.startsWith('/habitaciones');
+  const isStandalonePublicRoute = location.pathname.startsWith('/habitaciones') || location.pathname === '/login';
 
   if (isStaffRoute || isStandalonePublicRoute) {
     return <>{children}</>;

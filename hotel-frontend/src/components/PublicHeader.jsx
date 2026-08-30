@@ -10,7 +10,7 @@ export default function PublicHeader() {
             Sheraton Lima
           </div>
           <span className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider block">
-            The Grand Ledger
+            Hotel Sheraton
           </span>
         </Link>
 
@@ -39,10 +39,10 @@ export default function PublicHeader() {
         {/* Botones de acción */}
         <div className="flex items-center gap-3 sm:gap-4">
           <Link
-            to="/recepcionista/huespedes/nuevo"
-            className="text-[#4d4635] font-mono text-xs uppercase tracking-wider hover:text-[#755b00] hidden sm:block"
+            to="/login"
+            className="text-[#4d4635] font-mono text-xs uppercase tracking-wider hover:text-[#755b00] hidden sm:flex items-center gap-1"
           >
-            Panel Staff
+            <span className="material-symbols-outlined text-[14px]">login</span> Iniciar Sesión
           </Link>
           <Link
             to="/habitaciones"

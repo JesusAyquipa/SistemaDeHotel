@@ -1,15 +1,22 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function StaffSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const activePath = location.pathname;
 
   const toggleMobileMenu = () => {
     setMobileOpen(!mobileOpen);
   };
+
+  // Format role
+  const displayRole = user?.roles?.includes('admin') ? 'Administrador' : 
+                      user?.roles?.includes('recepcionista') ? 'Recepción' : 'Staff';
+  const displayName = user?.name || 'Cargando...';
 
   const navContent = (
     <div className="flex flex-col h-full p-4 w-64 bg-[#f5f3ee] border-r border-[#d1c5af] text-[#1b1c19] shadow-key-tag">
@@ -39,9 +46,9 @@ export default function StaffSidebar() {
           <div className="w-10 h-10 rounded-full bg-[#e4e2dd] flex items-center justify-center overflow-hidden border border-[#d1c5af] flex-shrink-0">
             <span className="material-symbols-outlined text-[#525e7d]">account_circle</span>
           </div>
-          <div>
-            <div className="font-serif font-semibold text-sm text-[#1b1c19]">Recepción</div>
-            <div className="font-mono text-xs text-[#4d4635]">Turno: Mañana</div>
+          <div className="truncate">
+            <div className="font-serif font-semibold text-sm text-[#1b1c19] truncate">{displayRole}</div>
+            <div className="font-mono text-xs text-[#4d4635] truncate">{displayName}</div>
           </div>
         </div>
         <button className="w-full mt-3 btn-primary text-xs py-2">
@@ -134,14 +141,16 @@ export default function StaffSidebar() {
             </Link>
           </li>
           <li>
-            <Link
-              to="/"
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 px-3 py-2 rounded text-[#4d4635] hover:bg-[#eae8e3] transition-all"
+            <button
+              onClick={() => {
+                setMobileOpen(false);
+                logout();
+              }}
+              className="w-full text-left flex items-center gap-3 px-3 py-2 rounded text-[#4d4635] hover:bg-[#eae8e3] transition-all"
             >
               <span className="material-symbols-outlined">logout</span>
-              <span className="font-mono text-xs uppercase tracking-wider">Acceso Personal</span>
-            </Link>
+              <span className="font-mono text-xs uppercase tracking-wider">Cerrar Sesión</span>
+            </button>
           </li>
         </ul>
       </div>
@@ -160,10 +169,10 @@ export default function StaffSidebar() {
           >
             <span className="material-symbols-outlined text-2xl">menu</span>
           </button>
-          <span className="font-serif font-bold text-sm text-[#1b1c19]">THE GRAND LEDGER</span>
+          <span className="font-serif font-bold text-sm text-[#1b1c19]">HOTEL SHERATON</span>
         </div>
         <span className="font-mono text-xs bg-[#c9a227]/20 text-[#755b00] px-2 py-0.5 rounded font-semibold">
-          Recepción
+          {displayRole}
         </span>
       </div>
 
