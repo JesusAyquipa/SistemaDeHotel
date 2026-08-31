@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: `${API_URL}/api`,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -11,7 +13,7 @@ const api = axios.create({
 
 // Helper for Sanctum CSRF protection
 export const getCsrfToken = () => {
-  return axios.get('http://localhost:8000/sanctum/csrf-cookie', {
+  return axios.get(`${API_URL}/sanctum/csrf-cookie`, {
     withCredentials: true,
   });
 };
