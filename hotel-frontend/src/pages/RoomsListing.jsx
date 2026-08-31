@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import PublicHeader from '../components/PublicHeader';
 import PublicFooter from '../components/PublicFooter';
 import AvailabilitySearch from '../components/AvailabilitySearch';
@@ -9,6 +11,10 @@ import PaymentReceiptModal from '../components/PaymentReceiptModal';
 import { getAvailableRooms } from '../services/rooms';
 
 export default function RoomsListing() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -188,7 +194,11 @@ export default function RoomsListing() {
                     key={room.id}
                     room={room}
                     onSelect={(selectedRoom) => {
-                      setSelectedRoomForBooking(selectedRoom);
+                      if (!user) {
+                        navigate('/login', { state: { from: location } });
+                      } else {
+                        setSelectedRoomForBooking(selectedRoom);
+                      }
                     }}
                   />
                 ))}

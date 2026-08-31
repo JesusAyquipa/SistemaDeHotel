@@ -8,6 +8,7 @@ export default function GuestLogin() {
   const { login, register } = useAuth();
   
   const [isRegistering, setIsRegistering] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -106,7 +107,7 @@ export default function GuestLogin() {
         <div className={`w-full ${isRegistering ? 'md:w-7/12' : 'md:w-7/12'} p-6 sm:p-8 lg:p-12 xl:p-16 flex flex-col justify-center bg-[#F7F6F3] max-h-screen overflow-y-auto`}>
           
           {/* Opciones Adicionales */}
-          <div className="absolute top-4 right-4 z-20">
+          <div className="flex justify-end mb-6 w-full">
             <Link to="/habitaciones" className="font-utility-sm text-xs text-[#4d4635] hover:text-[#755b00] uppercase tracking-wider font-medium flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px]">home</span>
               Return to Home
@@ -190,9 +191,9 @@ export default function GuestLogin() {
             
             <div className="relative">
               <label className="block font-utility-sm text-xs text-[#4d4635] uppercase tracking-wider mb-1 font-medium">Password *</label>
-              <input value={formData.password} onChange={handleChange} className="input-ledger font-body-md text-base text-[#1b1c19] w-full" name="password" placeholder="••••••••" required type="password" minLength={8} />
-              <button className="absolute right-0 bottom-2 text-[#4d4635] hover:text-[#755b00] transition-colors" type="button">
-                <span className="material-symbols-outlined text-[20px]">visibility</span>
+              <input value={formData.password} onChange={handleChange} className="input-ledger font-body-md text-base text-[#1b1c19] w-full pr-10" name="password" placeholder="••••••••" required type={showPassword ? "text" : "password"} minLength={8} />
+              <button onClick={() => setShowPassword(!showPassword)} className="absolute right-0 bottom-2 text-[#4d4635] hover:text-[#755b00] transition-colors" type="button">
+                <span className="material-symbols-outlined text-[20px]">{showPassword ? 'visibility_off' : 'visibility'}</span>
               </button>
             </div>
             
