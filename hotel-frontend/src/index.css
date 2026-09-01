@@ -121,3 +121,18 @@
 .font-body-md { font-family: var(--font-sans); }
 .font-utility-md { font-family: var(--font-mono); font-weight: 500; }
 .font-utility-sm { font-family: var(--font-mono); font-weight: 500; }
+
+/* Custom DatePicker Styles */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+.react-datepicker__day--excluded {
+  background-color: #ffdad6 !important;
+  color: #93000a !important;
+  text-decoration: line-through;
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+.react-datepicker__day--excluded:hover {
+  background-color: #ffdad6 !important;
+}

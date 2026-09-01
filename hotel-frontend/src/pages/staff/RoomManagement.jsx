@@ -88,8 +88,8 @@ export default function RoomManagement() {
   const [submitting, setSubmitting] = useState(false);
 
   // Cargar habitaciones desde la API
-  const fetchRoomsData = useCallback(async () => {
-    setLoading(true);
+  const fetchRoomsData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const data = await getStaffRooms({
@@ -103,7 +103,7 @@ export default function RoomManagement() {
       const msg = err.response?.data?.message || 'Error al cargar habitaciones.';
       setError(msg);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [selectedStatus, searchTerm]);
 
@@ -120,7 +120,7 @@ export default function RoomManagement() {
         showNotification(
           `🔔 Hab. ${eventData.room_number}: Estado cambió de ${eventData.old_status} a ${eventData.new_status}`
         );
-        fetchRoomsData();
+        fetchRoomsData(false); // Refrescar en background sin skeletons
       });
 
       return () => {
@@ -138,12 +138,58 @@ export default function RoomManagement() {
 
   // Handler para cambio rápido de estado en 1-click
   const handleQuickStatusChange = async (roomId, newStatus, roomNumber) => {
+    // 1. Optimistic UI update para respuesta instantánea
+    const oldRoom = rooms.find((r) => r.id === roomId);
+    const oldStatus = oldRoom ? oldRoom.status : null;
+
+    setRooms((prevRooms) => {
+      // Si el filtro está activado y el nuevo estado ya no coincide, lo removemos de la vista
+      if (selectedStatus !== 'todos' && selectedStatus !== newStatus) {
+        return prevRooms.filter((r) => r.id !== roomId);
+      }
+      // De lo contrario, solo actualizamos el estado
+      return prevRooms.map((room) =>
+        room.id === roomId ? { ...room, status: newStatus } : room
+      );
+    });
+
+    if (oldStatus) {
+      setMetrics((prev) => ({
+        ...prev,
+        [oldStatus]: Math.max(0, (prev[oldStatus] || 0) - 1),
+        [newStatus]: (prev[newStatus] || 0) + 1,
+      }));
+    }
+
+    // 2. Llamada a la API
     try {
       await updateRoomStatus(roomId, newStatus);
       showNotification(`Habitación ${roomNumber} actualizada a estado: ${newStatus.toUpperCase()}`);
-      fetchRoomsData();
+      // Refrescar en background para asegurar sincronización con base de datos sin mostrar skeletons
+      fetchRoomsData(false);
     } catch (err) {
       console.error('Error al cambiar estado:', err);
+      // Revertir estado optimista si hubo error
+      setRooms((prevRooms) => {
+        if (selectedStatus !== 'todos' && selectedStatus !== newStatus) {
+          // Si lo habíamos eliminado de la vista, no podemos devolverlo fácilmente 
+          // sin recargar desde la API, así que forzamos recarga con loading
+          fetchRoomsData(true);
+          return prevRooms;
+        }
+        return prevRooms.map((room) =>
+          room.id === roomId ? { ...room, status: oldStatus } : room
+        );
+      });
+
+      if (oldStatus) {
+        setMetrics((prev) => ({
+          ...prev,
+          [oldStatus]: (prev[oldStatus] || 0) + 1,
+          [newStatus]: Math.max(0, (prev[newStatus] || 0) - 1),
+        }));
+      }
+      
       const msg = err.response?.data?.message || 'No se pudo actualizar el estado.';
       showNotification(`❌ ${msg}`);
     }

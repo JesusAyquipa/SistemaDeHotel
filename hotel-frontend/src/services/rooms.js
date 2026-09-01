@@ -24,6 +24,12 @@ export const getAvailableRooms = async (params = {}) => {
   return response.data;
 };
 
+export const getRoomBookedDates = async (roomId) => {
+  const response = await api.get(`/rooms/${roomId}/booked-dates`);
+  return response.data.booked_dates;
+};
+
 export default {
   getAvailableRooms,
+  getRoomBookedDates,
 };

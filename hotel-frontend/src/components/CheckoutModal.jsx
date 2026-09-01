@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { createCheckoutIntent, processMockPayment } from '../services/paymentService';
+import { getRoomBookedDates } from '../services/rooms';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 // Imágenes por defecto si no vienen en la habitación
 const DEFAULT_IMAGES = {
@@ -36,6 +39,22 @@ function detectCardBrand(number) {
   if (/^4/.test(cleaned)) return 'visa';
   if (/^5[1-5]/.test(cleaned) || /^2[2-7]/.test(cleaned)) return 'mastercard';
   if (/^3[47]/.test(cleaned)) return 'amex';
+  return null;
+}
+
+/**
+ * Detecta el banco emisor (Perú) basándose en algunos BINs comunes.
+ */
+function detectCardBank(number) {
+  const cleaned = number.replace(/\D/g, '');
+  if (cleaned.length < 4) return null;
+  
+  if (/^(4145|4154|4312|4557|4969|4280|5155|5406|5289)/.test(cleaned)) return 'BCP';
+  if (/^(4143|4214|4213|5122|5491|5169|5300|5198)/.test(cleaned)) return 'Interbank';
+  if (/^(4220|4551|4555|5256|5188)/.test(cleaned)) return 'BBVA';
+  if (/^(4321|4894|5160|5438|5273)/.test(cleaned)) return 'Scotiabank';
+  if (/^(3600|3000|4556|4122)/.test(cleaned)) return 'Diners / Pichincha';
+  
   return null;
 }
 
@@ -129,6 +148,27 @@ export default function CheckoutModal({
     card_holder: '',
   });
 
+  // ===== Fechas Reservadas (Bloqueadas) =====
+  const [bookedIntervals, setBookedIntervals] = useState([]);
+
+  useEffect(() => {
+    const fetchBookedDates = async () => {
+      try {
+        const datesArray = await getRoomBookedDates(room.id);
+        const intervals = datesArray.map(b => ({
+          start: new Date(b.check_in + 'T00:00:00'),
+          end: new Date(b.check_out + 'T00:00:00')
+        }));
+        setBookedIntervals(intervals);
+      } catch (err) {
+        console.error('Error al obtener fechas reservadas:', err);
+      }
+    };
+    if (room?.id) {
+      fetchBookedDates();
+    }
+  }, [room?.id]);
+
   // ===== Estado de la transacción =====
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -147,17 +187,30 @@ export default function CheckoutModal({
   })();
   const totalAmount = nights * Number(room.price_per_night);
   const cardBrand = detectCardBrand(cardData.card_number);
+  const cardBank = detectCardBank(cardData.card_number);
   const roomImage = room.image_url || DEFAULT_IMAGES[room.bed_type] || DEFAULT_IMAGES.default;
 
   // ===== Handlers =====
-  const handleDateChange = (e) => {
-    const { name, value } = e.target;
-    setDates((prev) => ({ ...prev, [name]: value }));
+  const handleDateChange = (name, date) => {
+    if (!date) return;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    
+    setDates((prev) => ({ ...prev, [name]: dateStr }));
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: null }));
+    }
   };
 
   const handleGuestChange = (e) => {
     const { name, value } = e.target;
-    setGuestData((prev) => ({ ...prev, [name]: value }));
+    let finalValue = value;
+    if (name === 'guest_name' || name === 'guest_surname') {
+      finalValue = value.replace(/[0-9]/g, '');
+    }
+    setGuestData((prev) => ({ ...prev, [name]: finalValue }));
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
     }
@@ -169,6 +222,8 @@ export default function CheckoutModal({
     if (name === 'card_number') formatted = formatCardNumber(value);
     if (name === 'card_expiry') formatted = formatExpiry(value);
     if (name === 'card_cvc') formatted = value.replace(/\D/g, '').slice(0, 4);
+    if (name === 'card_holder') formatted = value.replace(/[0-9]/g, '');
+    
     setCardData((prev) => ({ ...prev, [name]: formatted }));
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
@@ -178,12 +233,30 @@ export default function CheckoutModal({
   // ===== Validación del Paso 0 (Resumen + Huésped) =====
   const validateStep0 = () => {
     const errors = {};
+    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+    const repeatingRegex = /(.)\1{2,}/;
+
     if (!dates.check_in) errors.check_in = 'Fecha de check-in requerida';
     if (!dates.check_out) errors.check_out = 'Fecha de check-out requerida';
     if (dates.check_in >= dates.check_out) errors.check_out = 'El check-out debe ser posterior al check-in';
 
-    if (!guestData.guest_name.trim()) errors.guest_name = 'El nombre es obligatorio';
-    if (!guestData.guest_surname.trim()) errors.guest_surname = 'Los apellidos son obligatorios';
+    const gName = guestData.guest_name.trim();
+    if (!gName) {
+      errors.guest_name = 'El nombre es obligatorio';
+    } else if (gName.length < 2) {
+      errors.guest_name = 'Debe tener al menos 2 letras';
+    } else if (!nameRegex.test(gName) || repeatingRegex.test(gName)) {
+      errors.guest_name = 'Ingrese un nombre válido';
+    }
+
+    const gSurname = guestData.guest_surname.trim();
+    if (!gSurname) {
+      errors.guest_surname = 'Los apellidos son obligatorios';
+    } else if (gSurname.length < 2) {
+      errors.guest_surname = 'Debe tener al menos 2 letras';
+    } else if (!nameRegex.test(gSurname) || repeatingRegex.test(gSurname)) {
+      errors.guest_surname = 'Ingrese apellidos válidos';
+    }
     if (!guestData.guest_email.trim()) {
       errors.guest_email = 'El correo electrónico es obligatorio';
     } else if (!/\S+@\S+\.\S+/.test(guestData.guest_email)) {
@@ -212,15 +285,31 @@ export default function CheckoutModal({
     } else {
       const [mm, yy] = cardData.card_expiry.split('/');
       const expMonth = parseInt(mm, 10);
+      const expYear = parseInt(yy, 10) + 2000;
+      const now = new Date();
+      const currYear = now.getFullYear();
+      const currMonth = now.getMonth() + 1;
+
       if (expMonth < 1 || expMonth > 12) {
         errors.card_expiry = 'Mes inválido (01-12)';
+      } else if (expYear < currYear || (expYear === currYear && expMonth < currMonth)) {
+        errors.card_expiry = 'La tarjeta está vencida';
       }
     }
     if (!cardData.card_cvc || cardData.card_cvc.length < 3) {
       errors.card_cvc = 'Ingrese el código CVC (3-4 dígitos)';
     }
-    if (!cardData.card_holder.trim()) {
+    
+    const holder = cardData.card_holder.trim();
+    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+    const repeatingRegex = /(.)\1{2,}/;
+    
+    if (!holder) {
       errors.card_holder = 'Nombre del titular es obligatorio';
+    } else if (holder.length < 5 || !holder.includes(' ')) {
+      errors.card_holder = 'Ingrese nombre y apellido completo';
+    } else if (!nameRegex.test(holder) || repeatingRegex.test(holder)) {
+      errors.card_holder = 'Ingrese un nombre válido';
     }
 
     setFieldErrors(errors);
@@ -451,14 +540,14 @@ export default function CheckoutModal({
                 <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
                   Check-In (Llegada) *
                 </label>
-                <input
-                  type="date"
-                  name="check_in"
-                  min={todayStr}
-                  value={dates.check_in}
-                  onChange={handleDateChange}
-                  required
+                <DatePicker
+                  selected={dates.check_in ? new Date(dates.check_in + 'T12:00:00') : null}
+                  onChange={(date) => handleDateChange('check_in', date)}
+                  minDate={new Date()}
+                  excludeDateIntervals={bookedIntervals}
+                  dateFormat="dd/MM/yyyy"
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none"
+                  placeholderText="DD/MM/YYYY"
                 />
                 {fieldErrors.check_in && (
                   <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.check_in}</p>
@@ -468,14 +557,15 @@ export default function CheckoutModal({
                 <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
                   Check-Out (Salida) *
                 </label>
-                <input
-                  type="date"
-                  name="check_out"
-                  min={dates.check_in || todayStr}
-                  value={dates.check_out}
-                  onChange={handleDateChange}
+                <DatePicker
+                  selected={dates.check_out ? new Date(dates.check_out + 'T12:00:00') : null}
+                  onChange={(date) => handleDateChange('check_out', date)}
+                  minDate={dates.check_in ? new Date(dates.check_in + 'T12:00:00') : new Date()}
+                  excludeDateIntervals={bookedIntervals}
+                  dateFormat="dd/MM/yyyy"
                   required
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none"
+                  placeholderText="DD/MM/YYYY"
                 />
                 {fieldErrors.check_out && (
                   <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.check_out}</p>
@@ -580,10 +670,17 @@ export default function CheckoutModal({
             </div>
 
             <div className="flex justify-between items-start relative z-10">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-6 bg-[#c9a227] rounded-sm" />
-                <div className="w-5 h-5 bg-[#d1c5af]/30 rounded-full flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[10px] text-[#d1c5af]">wifi</span>
+              <div className="flex flex-col gap-2">
+                {cardBank && (
+                  <span className="font-sans font-black italic text-sm tracking-wider text-[#fbf9f4]">
+                    {cardBank}
+                  </span>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-6 bg-[#c9a227] rounded-sm" />
+                  <div className="w-5 h-5 bg-[#d1c5af]/30 rounded-full flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[10px] text-[#d1c5af]">wifi</span>
+                  </div>
                 </div>
               </div>
               <CardBrandIcon brand={cardBrand} />

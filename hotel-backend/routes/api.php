@@ -29,6 +29,7 @@ Route::post('/guests', [GuestController::class, 'store']);
 
 // Habitaciones: catálogo de disponibilidad con filtros
 Route::get('/rooms/available', [RoomController::class, 'available']);
+Route::get('/rooms/{id}/booked-dates', [RoomController::class, 'bookedDates']);
 
 // Reservas de habitaciones para huéspedes
 Route::post('/bookings', [BookingController::class, 'store']);
