@@ -5,6 +5,7 @@ import StaffManagement from '../pages/staff/StaffManagement';
 import RoomManagement from '../pages/staff/RoomManagement';
 import RoomsListing from '../pages/RoomsListing';
 import GuestLogin from '../pages/GuestLogin';
+import BookingManagement from '../pages/staff/BookingManagement';
 import ProtectedRoute from '../components/ProtectedRoute';
 
 export default function AppRoutes({ pingStatus, setPingStatus }) {
@@ -20,6 +21,11 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       <Route path="/recepcionista/habitaciones" element={
         <ProtectedRoute allowedRoles={['recepcionista', 'admin']}>
           <RoomManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/recepcionista/reservas" element={
+        <ProtectedRoute allowedRoles={['recepcionista', 'admin']}>
+          <BookingManagement />
         </ProtectedRoute>
       } />
       <Route path="/recepcionista/huespedes/nuevo" element={
