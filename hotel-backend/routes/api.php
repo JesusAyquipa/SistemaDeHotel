@@ -34,6 +34,8 @@ Route::get('/rooms/{id}/booked-dates', [RoomController::class, 'bookedDates']);
 // Reservas de habitaciones para huéspedes
 Route::post('/bookings', [BookingController::class, 'store']);
 Route::get('/bookings/{code}', [BookingController::class, 'showByCode']);
+Route::put('/bookings/{code}', [BookingController::class, 'update']);
+Route::post('/bookings/{code}/cancel', [BookingController::class, 'cancel']);
 
 // ============================================================
 // Módulo de Pagos y Checkout Seguro
