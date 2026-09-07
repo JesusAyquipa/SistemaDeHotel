@@ -14,6 +14,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\BookingConfirmedMail;
 
 class PaymentController extends Controller
 {
@@ -229,6 +231,13 @@ class PaymentController extends Controller
         });
 
         $booking->load(['guest', 'room', 'latestPayment']);
+
+        // Enviar correo de confirmación de reserva
+        try {
+            Mail::to($booking->guest->email)->send(new BookingConfirmedMail($booking));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('No se pudo enviar el correo de confirmación post-pago: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message'        => '¡Pago procesado exitosamente! Tu reserva ha sido confirmada.',

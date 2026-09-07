@@ -20,7 +20,9 @@ export default function EditBookingModal({ isOpen, onClose, booking }) {
       <div className="bg-[#fbf9f4] w-full max-w-2xl shadow-2xl relative flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#d1c5af]">
-          <h2 className="font-serif text-2xl font-bold text-[#1b1c19]">Editar Reserva</h2>
+          <h2 className="font-serif text-2xl font-bold text-[#1b1c19]">
+            {booking ? 'Editar Reserva' : 'Nueva Reserva Manual'}
+          </h2>
           <button 
             onClick={onClose}
             className="text-[#4d4635] hover:text-[#1b1c19] transition-colors"
@@ -48,6 +50,7 @@ export default function EditBookingModal({ isOpen, onClose, booking }) {
                   <input 
                     type="date" 
                     value={checkIn}
+                    min={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setCheckIn(e.target.value)}
                     className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans appearance-none"
                   />
@@ -61,6 +64,7 @@ export default function EditBookingModal({ isOpen, onClose, booking }) {
                   <input 
                     type="date" 
                     value={checkOut}
+                    min={checkIn || new Date().toISOString().split('T')[0]}
                     onChange={(e) => setCheckOut(e.target.value)}
                     className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans appearance-none"
                   />
@@ -138,7 +142,7 @@ export default function EditBookingModal({ isOpen, onClose, booking }) {
             onClick={handleSubmit}
             className="bg-[#755b00] hover:bg-[#c9a227] text-white font-mono text-xs font-semibold px-6 py-2 uppercase tracking-widest transition-colors shadow-sm"
           >
-            GUARDAR CAMBIOS
+            {booking ? 'GUARDAR CAMBIOS' : 'CREAR RESERVA'}
           </button>
         </div>
       </div>
