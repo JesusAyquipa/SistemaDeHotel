@@ -65,6 +65,19 @@ export default function PublicHeader() {
                     <p className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider mb-1">Cuenta</p>
                     <p className="font-serif font-bold text-sm text-[#1b1c19] truncate">{user.name} {user.surname}</p>
                   </div>
+                  
+                  {/* Link al panel de administración si tiene rol de staff o admin */}
+                  {user.roles && (user.roles.includes('admin') || user.roles.includes('staff') || user.roles.includes('recepcionista') || !user.roles.includes('cliente')) && (
+                    <Link 
+                      to="/recepcionista/habitaciones"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
+                      Panel de Administración
+                    </Link>
+                  )}
+
                   <button 
                     onClick={() => { logout(); setDropdownOpen(false); }}
                     className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#ba1a1a] hover:bg-[#ffdad6]/40 transition-colors flex items-center gap-2 cursor-pointer"

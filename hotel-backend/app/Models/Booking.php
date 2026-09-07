@@ -43,6 +43,11 @@ class Booking extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function companions()
+    {
+        return $this->hasMany(BookingCompanion::class);
+    }
+
     /**
      * Obtiene el pago más reciente asociado a esta reserva.
      */

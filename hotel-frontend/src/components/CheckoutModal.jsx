@@ -140,6 +140,8 @@ export default function CheckoutModal({
     notes: '',
   });
 
+  const [companions, setCompanions] = useState([]);
+
   // ===== Datos de tarjeta =====
   const [cardData, setCardData] = useState({
     card_number: '',
@@ -230,6 +232,25 @@ export default function CheckoutModal({
     }
   };
 
+  const handleAddCompanion = () => {
+    if (companions.length + 1 >= room.capacity) {
+      alert(`La capacidad máxima de la habitación es ${room.capacity} persona(s).`);
+      return;
+    }
+    setCompanions([...companions, { name: '', surname: '', document_type: 'DNI', document_number: '' }]);
+  };
+
+  const updateCompanion = (index, field, value) => {
+    const newCompanions = [...companions];
+    newCompanions[index][field] = value;
+    setCompanions(newCompanions);
+  };
+
+  const removeCompanion = (index) => {
+    const newCompanions = companions.filter((_, i) => i !== index);
+    setCompanions(newCompanions);
+  };
+
   // ===== Validación del Paso 0 (Resumen + Huésped) =====
   const validateStep0 = () => {
     const errors = {};
@@ -267,6 +288,18 @@ export default function CheckoutModal({
     } else if (guestData.document_type === 'DNI' && !/^\d{8}$/.test(guestData.document_number.trim())) {
       errors.document_number = 'El DNI debe tener 8 dígitos numéricos';
     }
+
+    if (guestData.guest_phone && !/^\+?[0-9\s\-]+$/.test(guestData.guest_phone)) {
+      errors.guest_phone = 'Ingrese un teléfono válido';
+    }
+
+    companions.forEach((comp, idx) => {
+      if (!comp.name.trim() || !nameRegex.test(comp.name)) errors[`comp_${idx}_name`] = 'Nombre inválido';
+      if (!comp.surname.trim() || !nameRegex.test(comp.surname)) errors[`comp_${idx}_surname`] = 'Apellido inválido';
+      if (!comp.document_number.trim() || (comp.document_type === 'DNI' && !/^\d{8}$/.test(comp.document_number))) {
+        errors[`comp_${idx}_doc`] = 'Documento inválido';
+      }
+    });
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -335,6 +368,7 @@ export default function CheckoutModal({
         document_number: guestData.document_number.trim(),
         guest_phone: guestData.guest_phone.trim() || undefined,
         notes: guestData.notes.trim() || undefined,
+        companions: companions
       };
 
       const result = await createCheckoutIntent(payload);
@@ -627,6 +661,57 @@ export default function CheckoutModal({
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-sans text-[#1b1c19] focus:border-[#14213d] focus:outline-none resize-none" />
               </div>
             </div>
+
+            {/* Acompañantes */}
+            {companions.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-[#d1c5af]">
+                <h4 className="font-mono text-xs uppercase font-bold text-[#14213d] tracking-wider mb-3">
+                  Acompañantes
+                </h4>
+                <div className="space-y-3">
+                  {companions.map((comp, idx) => (
+                    <div key={idx} className="bg-[#fbf9f4] border border-[#d1c5af]/50 p-3 relative">
+                      <button type="button" onClick={() => removeCompanion(idx)} className="absolute top-2 right-2 text-[#ba1a1a] hover:bg-[#ba1a1a]/10 p-1 rounded-full">
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Nombre *</label>
+                          <input type="text" value={comp.name} onChange={e => updateCompanion(idx, 'name', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          {fieldErrors[`comp_${idx}_name`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_name`]}</p>}
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Apellidos *</label>
+                          <input type="text" value={comp.surname} onChange={e => updateCompanion(idx, 'surname', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          {fieldErrors[`comp_${idx}_surname`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_surname`]}</p>}
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Documento *</label>
+                          <select value={comp.document_type} onChange={e => updateCompanion(idx, 'document_type', e.target.value)} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs">
+                            <option value="DNI">DNI</option>
+                            <option value="Pasaporte">Pasaporte</option>
+                            <option value="Carnet Extranjería">C. Extranjería</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">N° Doc *</label>
+                          <input type="text" value={comp.document_number} onChange={e => updateCompanion(idx, 'document_number', e.target.value)} required pattern={comp.document_type === 'DNI' ? "^[0-9]{8}$" : ".*"} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          {fieldErrors[`comp_${idx}_doc`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_doc`]}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {companions.length + 1 < room.capacity && (
+              <button type="button" onClick={handleAddCompanion} className="mt-4 text-[#755b00] font-mono text-xs uppercase font-bold flex items-center gap-1 hover:text-[#c9a227] transition-colors">
+                <span className="material-symbols-outlined text-sm">person_add</span>
+                Añadir Acompañante
+              </button>
+            )}
+
           </div>
         </div>
       </div>

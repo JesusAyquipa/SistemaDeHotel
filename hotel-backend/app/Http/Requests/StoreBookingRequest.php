@@ -29,13 +29,18 @@ class StoreBookingRequest extends FormRequest
             'room_id'         => ['required', 'exists:rooms,id'],
             'check_in'        => ['required', 'date', 'after_or_equal:today'],
             'check_out'       => ['required', 'date', 'after:check_in'],
-            'guest_name'      => ['required', 'string', 'max:255'],
-            'guest_surname'   => ['required', 'string', 'max:255'],
+            'guest_name'      => ['required', 'string', 'max:255', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'guest_surname'   => ['required', 'string', 'max:255', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'guest_email'     => ['required', 'email', 'max:255'],
             'document_type'   => ['required', 'string', 'max:50'],
             'document_number' => $documentRules,
-            'guest_phone'     => ['nullable', 'string', 'max:20'],
+            'guest_phone'     => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'notes'           => ['nullable', 'string', 'max:500'],
+            'companions'      => ['nullable', 'array'],
+            'companions.*.name' => ['required_with:companions', 'string', 'max:255', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'companions.*.surname' => ['required_with:companions', 'string', 'max:255', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'companions.*.document_type' => ['required_with:companions', 'string', 'max:50'],
+            'companions.*.document_number' => ['required_with:companions', 'string', 'max:50'],
         ];
     }
 
@@ -58,6 +63,14 @@ class StoreBookingRequest extends FormRequest
             'document_type.required'   => 'El tipo de documento es obligatorio.',
             'document_number.required' => 'El número de documento es obligatorio.',
             'document_number.regex'    => 'El DNI debe tener exactamente 8 dígitos numéricos.',
+            'guest_phone.regex'        => 'El teléfono solo debe contener números (opcionalmente el signo +).',
+            'guest_name.regex'         => 'El nombre solo debe contener letras.',
+            'guest_surname.regex'      => 'Los apellidos solo deben contener letras.',
+            'companions.*.name.required_with' => 'El nombre del acompañante es obligatorio.',
+            'companions.*.name.regex'         => 'El nombre del acompañante solo debe contener letras.',
+            'companions.*.surname.required_with' => 'Los apellidos del acompañante son obligatorios.',
+            'companions.*.surname.regex'      => 'Los apellidos del acompañante solo deben contener letras.',
+            'companions.*.document_number.required_with' => 'El documento del acompañante es obligatorio.',
         ];
     }
 }

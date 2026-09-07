@@ -38,16 +38,33 @@ class PaymentController extends Controller
             'room_id'         => 'required|exists:rooms,id',
             'check_in'        => 'required|date|after_or_equal:today',
             'check_out'       => 'required|date|after:check_in',
-            'guest_name'      => 'required|string|max:100',
-            'guest_surname'   => 'required|string|max:100',
+            'guest_name'      => ['required', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'guest_surname'   => ['required', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'guest_email'     => 'required|email|max:150',
             'document_type'   => 'required|string|in:DNI,Pasaporte,Carnet Extranjería',
             'document_number' => 'required|string|max:20',
-            'guest_phone'     => 'nullable|string|max:20',
+            'guest_phone'     => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'notes'           => 'nullable|string|max:500',
+            'companions'      => 'nullable|array',
+            'companions.*.name' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'companions.*.surname' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
+            'companions.*.document_type' => 'required_with:companions|string',
+            'companions.*.document_number' => 'required_with:companions|string|max:20',
         ]);
 
         $room = Room::findOrFail($validated['room_id']);
+
+        $companionsCount = isset($validated['companions']) ? count($validated['companions']) : 0;
+        $totalGuests = 1 + $companionsCount;
+
+        if ($totalGuests > $room->capacity) {
+            return response()->json([
+                'message' => 'La cantidad de personas excede la capacidad máxima de esta habitación.',
+                'errors'  => [
+                    'companions' => ["Capacidad excedida. La habitación permite un máximo de {$room->capacity} persona(s)."]
+                ]
+            ], 422);
+        }
 
         // Calcular noches y monto total
         $checkIn = Carbon::parse($validated['check_in'])->startOfDay();
@@ -120,6 +137,19 @@ class PaymentController extends Controller
                 'total_amount' => $totalAmount,
                 'status'       => 'pending_payment',
             ]);
+
+            // Guardar acompañantes si existen
+            if (!empty($validated['companions'])) {
+                foreach ($validated['companions'] as $companion) {
+                    \App\Models\BookingCompanion::create([
+                        'booking_id'      => $newBooking->id,
+                        'name'            => $companion['name'],
+                        'surname'         => $companion['surname'],
+                        'document_type'   => $companion['document_type'],
+                        'document_number' => $companion['document_number'],
+                    ]);
+                }
+            }
 
             // Registrar pago en estado pending
             Payment::create([

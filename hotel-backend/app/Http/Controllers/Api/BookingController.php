@@ -28,6 +28,18 @@ class BookingController extends Controller
 
         $room = Room::findOrFail($validated['room_id']);
 
+        $companionsCount = isset($validated['companions']) ? count($validated['companions']) : 0;
+        $totalGuests = 1 + $companionsCount;
+
+        if ($totalGuests > $room->capacity) {
+            return response()->json([
+                'message' => 'La cantidad de personas excede la capacidad máxima de esta habitación.',
+                'errors'  => [
+                    'companions' => ["Capacidad excedida. La habitación permite un máximo de {$room->capacity} persona(s)."]
+                ]
+            ], 422);
+        }
+
         $checkIn = Carbon::parse($validated['check_in'])->startOfDay();
         $checkOut = Carbon::parse($validated['check_out'])->startOfDay();
         $nights = $checkIn->diffInDays($checkOut);
@@ -96,6 +108,19 @@ class BookingController extends Controller
                 'total_amount' => $totalAmount,
                 'status'       => 'confirmed',
             ]);
+
+            // Guardar acompañantes si existen
+            if (!empty($validated['companions'])) {
+                foreach ($validated['companions'] as $companion) {
+                    \App\Models\BookingCompanion::create([
+                        'booking_id'      => $newBooking->id,
+                        'name'            => $companion['name'],
+                        'surname'         => $companion['surname'],
+                        'document_type'   => $companion['document_type'],
+                        'document_number' => $companion['document_number'],
+                    ]);
+                }
+            }
 
             // 4. Actualizar el estado de la habitación a 'reservada'
             $room->update([
