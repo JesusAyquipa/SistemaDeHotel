@@ -6,6 +6,7 @@ import RoomManagement from '../pages/staff/RoomManagement';
 import RoomsListing from '../pages/RoomsListing';
 import GuestLogin from '../pages/GuestLogin';
 import BookingManagement from '../pages/staff/BookingManagement';
+import ReceptionistBooking from '../pages/staff/ReceptionistBooking';
 import ReportsDashboard from '../pages/staff/ReportsDashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
 import MyBookings from '../pages/MyBookings';
@@ -61,7 +62,7 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       } />
       <Route path="/recepcionista/reservas" element={
         <ProtectedRoute allowedRoles={['recepcionista']}>
-          <BookingManagement />
+          <ReceptionistBooking />
         </ProtectedRoute>
       } />
       <Route path="/recepcionista/huespedes/nuevo" element={

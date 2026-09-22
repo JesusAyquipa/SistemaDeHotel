@@ -356,4 +356,89 @@ class BookingController extends Controller
             'booking'           => $booking->fresh()
         ]);
     }
+
+    /**
+     * Realiza el Check-in de una reserva.
+     * POST /api/staff/bookings/{code}/check-in
+     */
+    public function checkIn(string $code): JsonResponse
+    {
+        $booking = Booking::where('booking_code', $code)->firstOrFail();
+
+        if ($booking->status !== 'confirmed' && $booking->status !== 'pending_payment') {
+            return response()->json([
+                'message' => 'La reserva debe estar confirmada para realizar el check-in.'
+            ], 422);
+        }
+
+        $today = Carbon::today();
+        $checkInDate = Carbon::parse($booking->check_in)->startOfDay();
+
+        if ($today->lessThan($checkInDate)) {
+            return response()->json([
+                'message' => 'No se puede realizar el check-in antes de la fecha programada (' . $checkInDate->format('Y-m-d') . ').'
+            ], 422);
+        }
+
+        DB::transaction(function () use ($booking) {
+            $booking->update(['status' => 'checked_in']);
+            
+            $room = Room::find($booking->room_id);
+            if ($room) {
+                // Actualizamos el estado de la habitación
+                $room->update(['status' => 'ocupada']);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Check-in realizado con éxito.',
+            'booking' => $booking->fresh(['room'])
+        ]);
+    }
+
+    /**
+     * Realiza el Check-out de una reserva.
+     * POST /api/staff/bookings/{code}/check-out
+     */
+    public function checkOut(Request $request, string $code): JsonResponse
+    {
+        $booking = Booking::where('booking_code', $code)->firstOrFail();
+
+        if ($booking->status !== 'checked_in') {
+            return response()->json([
+                'message' => 'La reserva debe estar en estado Check-in para realizar el Check-out.'
+            ], 422);
+        }
+
+        $today = Carbon::today();
+        $checkOutDate = Carbon::parse($booking->check_out)->startOfDay();
+
+        $earlyCheckoutReason = null;
+        if ($today->lessThan($checkOutDate)) {
+            if (!$request->filled('early_checkout_reason')) {
+                return response()->json([
+                    'message' => 'Se requiere un motivo para la salida anticipada.',
+                    'requires_reason' => true
+                ], 422);
+            }
+            $earlyCheckoutReason = $request->input('early_checkout_reason');
+        }
+
+        DB::transaction(function () use ($booking, $earlyCheckoutReason) {
+            $booking->update([
+                'status' => 'completed',
+                'early_checkout_reason' => $earlyCheckoutReason
+            ]);
+            
+            $room = Room::find($booking->room_id);
+            if ($room) {
+                $room->update(['status' => 'disponible']);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Check-out realizado con éxito.',
+            'booking' => $booking->fresh(['room'])
+        ]);
+    }
 }

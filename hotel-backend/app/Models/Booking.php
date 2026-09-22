@@ -17,6 +17,7 @@ class Booking extends Model
         'check_out',
         'total_amount',
         'status',
+        'early_checkout_reason',
     ];
 
     protected static function booted()
