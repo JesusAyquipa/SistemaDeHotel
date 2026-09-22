@@ -6,9 +6,9 @@ import AppRoutes from './routes/AppRoutes';
 function MainLayout({ children, pingStatus }) {
   const location = useLocation();
 
-  // Si la ruta es del panel de recepcionista o staff, o la página de catálogo con su propio PublicHeader/PublicFooter
-  const isStaffRoute = location.pathname.startsWith('/recepcionista') || location.pathname.startsWith('/staff');
-  const isStandalonePublicRoute = location.pathname.startsWith('/habitaciones') || location.pathname === '/login' || location.pathname === '/mis-reservas';
+  // Si la ruta es del panel de recepcionista, admin o staff, o la página de catálogo con su propio PublicHeader/PublicFooter
+  const isStaffRoute = location.pathname.startsWith('/recepcionista') || location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff');
+  const isStandalonePublicRoute = location.pathname.startsWith('/habitaciones') || location.pathname === '/login' || location.pathname.startsWith('/cliente') || location.pathname === '/mis-reservas';
 
   if (isStaffRoute || isStandalonePublicRoute) {
     return <>{children}</>;
