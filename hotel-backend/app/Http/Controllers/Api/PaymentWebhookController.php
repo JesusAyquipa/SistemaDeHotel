@@ -101,7 +101,7 @@ class PaymentWebhookController extends Controller
 
             $booking = $payment->booking;
             $booking->update(['status' => 'confirmed']);
-            $booking->room->update(['status' => 'reservada']);
+            // No cambiamos el estado base de la habitación, para que siga apareciendo en el catálogo para otras fechas.
         });
 
         Log::info('Webhook: Payment succeeded', [

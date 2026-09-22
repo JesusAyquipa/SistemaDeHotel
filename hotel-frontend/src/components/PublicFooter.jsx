@@ -23,7 +23,7 @@ export default function PublicFooter() {
           </a>
           <span className="text-[#d1c5af]">|</span>
           <Link
-            to="/recepcionista/huespedes/nuevo"
+            to="/login"
             className="hover:text-[#755b00] transition-colors text-[#525e7d] font-semibold"
           >
             Acceso Personal

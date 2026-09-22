@@ -14,8 +14,10 @@ export default function StaffSidebar() {
   };
 
   // Format role
-  const displayRole = user?.roles?.includes('admin') ? 'Administrador' : 
-                      user?.roles?.includes('recepcionista') ? 'Recepción' : 'Staff';
+  const isAdmin = user?.roles?.includes('admin');
+  const basePath = isAdmin ? '/admin' : '/recepcionista';
+  const displayRole = isAdmin ? 'Administrador' : 
+                      user?.roles?.includes('recepcionista') ? 'Recepcionista' : 'Staff';
   const displayName = user?.name || 'Cargando...';
 
   const navContent = (
@@ -61,7 +63,7 @@ export default function StaffSidebar() {
         <ul className="space-y-1 px-1">
           <li>
             <Link
-              to="/recepcionista/habitaciones"
+              to={`${basePath}/habitaciones`}
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/habitaciones')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
@@ -74,7 +76,7 @@ export default function StaffSidebar() {
           </li>
           <li>
             <Link
-              to="/recepcionista/reservas"
+              to={`${basePath}/reservas`}
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reservas')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
@@ -87,7 +89,7 @@ export default function StaffSidebar() {
           </li>
           <li>
             <Link
-              to="/recepcionista/huespedes/nuevo"
+              to={`${basePath}/huespedes/nuevo`}
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/huespedes')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00] shadow-sm'
@@ -98,48 +100,54 @@ export default function StaffSidebar() {
               <span className="font-mono text-xs uppercase tracking-wider font-semibold">Huéspedes</span>
             </Link>
           </li>
-          <li>
-            <Link
-              to="/recepcionista/reportes"
-              onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reportes')
-                  ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
-                  : 'text-[#4d4635] hover:bg-[#eae8e3]'
-                }`}
-            >
-              <span className="material-symbols-outlined">analytics</span>
-              <span className="font-mono text-xs uppercase tracking-wider">Reportes</span>
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/recepcionista/personal"
-              onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/personal')
-                  ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
-                  : 'text-[#4d4635] hover:bg-[#eae8e3]'
-                }`}
-            >
-              <span className="material-symbols-outlined">manage_accounts</span>
-              <span className="font-mono text-xs uppercase tracking-wider">Personal</span>
-            </Link>
-          </li>
+          {isAdmin && (
+            <li>
+              <Link
+                to={`${basePath}/reportes`}
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reportes')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">analytics</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Reportes</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to={`${basePath}/personal`}
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/personal')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">manage_accounts</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Personal</span>
+              </Link>
+            </li>
+          )}
         </ul>
       </div>
 
       {/* Footer Navigation */}
       <div className="mt-auto pt-4 border-t border-[#d1c5af] px-1">
         <ul className="space-y-1">
-          <li>
-            <Link
-              to="/configuracion"
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 px-3 py-2 rounded text-[#4d4635] hover:bg-[#eae8e3] transition-all"
-            >
-              <span className="material-symbols-outlined">settings</span>
-              <span className="font-mono text-xs uppercase tracking-wider">Configuración</span>
-            </Link>
-          </li>
+          {isAdmin && (
+            <li>
+              <Link
+                to="/configuracion"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-3 px-3 py-2 rounded text-[#4d4635] hover:bg-[#eae8e3] transition-all"
+              >
+                <span className="material-symbols-outlined">settings</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Configuración</span>
+              </Link>
+            </li>
+          )}
           <li>
             <button
               onClick={() => {

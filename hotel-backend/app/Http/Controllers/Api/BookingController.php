@@ -18,6 +18,33 @@ use App\Mail\BookingConfirmedMail;
 class BookingController extends Controller
 {
     /**
+     * Devuelve todas las reservas para el panel de administración.
+     * GET /api/staff/bookings
+     */
+    public function indexStaff(Request $request): JsonResponse
+    {
+        $query = Booking::with(['guest', 'room']);
+
+        if ($request->filled('status') && $request->query('status') !== 'Todos') {
+            $statusMap = [
+                'Confirmada' => 'confirmed',
+                'Pendiente'  => 'pending_payment',
+                'Cancelada'  => 'cancelled',
+                'Check-in'   => 'checked_in',
+                'Completada' => 'completed'
+            ];
+            $mappedStatus = $statusMap[$request->query('status')] ?? strtolower($request->query('status'));
+            $query->where('status', $mappedStatus);
+        }
+
+        $bookings = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'bookings' => $bookings
+        ]);
+    }
+
+    /**
      * Crea una nueva reserva para un huésped.
      * Genera automáticamente un código único de reserva y actualiza el estado de la habitación.
      * POST /api/bookings
@@ -90,6 +117,7 @@ class BookingController extends Controller
                 $guest->update([
                     'name'        => $validated['guest_name'],
                     'surname'     => $validated['guest_surname'],
+                    'email'       => $validated['guest_email'],
                     'phone'       => $validated['guest_phone'] ?? $guest->phone,
                     'notes'       => $validated['notes'] ?? $guest->notes,
                 ]);
@@ -122,10 +150,9 @@ class BookingController extends Controller
                 }
             }
 
-            // 4. Actualizar el estado de la habitación a 'reservada'
-            $room->update([
-                'status' => 'reservada',
-            ]);
+            // El estado de la habitación NO debe cambiar a 'reservada'. 
+            // La habitación sigue estando 'disponible' en el inventario general, 
+            // solo se bloquean las fechas en base a los registros de Booking.
 
             return $newBooking;
         });
@@ -135,7 +162,7 @@ class BookingController extends Controller
 
         // Enviar correo de confirmación
         try {
-            Mail::to($booking->guest->email)->send(new BookingConfirmedMail($booking));
+            Mail::to($validated['guest_email'])->send(new BookingConfirmedMail($booking));
         } catch (\Exception $e) {
             \Log::error('No se pudo enviar el correo de confirmación: ' . $e->getMessage());
         }
@@ -171,6 +198,29 @@ class BookingController extends Controller
 
         return response()->json([
             'booking' => $booking
+        ]);
+    }
+
+    /**
+     * Devuelve las reservas del usuario autenticado.
+     * GET /api/my-bookings
+     */
+    public function myBookings(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->guestProfile) {
+            return response()->json([
+                'bookings' => []
+            ]);
+        }
+
+        $bookings = Booking::with(['room', 'payments'])
+            ->where('guest_id', $user->guestProfile->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'bookings' => $bookings
         ]);
     }
 
@@ -234,14 +284,8 @@ class BookingController extends Controller
         $totalAmount = $room->price_per_night * $nights;
 
         DB::transaction(function () use ($booking, $validated, $newRoomId, $room, $totalAmount) {
-            // Si la habitación cambió, liberar la antigua (si no tiene otras reservas, aunque de forma simple marcamos la nueva como reservada)
-            if ($booking->room_id !== $newRoomId) {
-                $oldRoom = Room::find($booking->room_id);
-                // Aquí en un sistema real se verificaría si la habitación antigua tiene otras reservas antes de marcarla como disponible
-                // Por simplicidad en este MVP, dejaremos que otro proceso actualice el estado de las habitaciones o lo asumimos libre si no tiene overlap
-                $oldRoom->update(['status' => 'disponible']);
-                $room->update(['status' => 'reservada']);
-            }
+            // Si la habitación cambió, no modificamos el estado base (sigue siendo disponible/mantenimiento, etc.)
+            // Las reservas en sí ya manejan la disponibilidad por fechas.
 
             $booking->update([
                 'check_in'     => $validated['check_in'],
@@ -300,12 +344,8 @@ class BookingController extends Controller
                 'status' => 'cancelled'
             ]);
 
-            // Liberar habitación
-            $room = Room::find($booking->room_id);
-            if ($room) {
-                $room->update(['status' => 'disponible']);
-            }
-            
+            // No cambiamos el estado de la habitación aquí, ya que el estado base 
+            // no depende de una reserva individual (sigue estando disponible para otras fechas).
             // En un sistema real aquí registraríamos el reembolso en la tabla payments
         });
 

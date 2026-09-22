@@ -17,7 +17,7 @@ export default function RegisterGuest() {
   };
 
   return (
-    <div className="bg-[#EDEBE6] text-[#1b1c19] antialiased min-h-screen flex flex-col md:flex-row overflow-x-hidden font-sans">
+    <div className="bg-[#EDEBE6] text-[#1b1c19] antialiased h-screen flex flex-col md:flex-row overflow-hidden font-sans">
       {/* Sidebar Fijo (Desktop) / Drawer Hamburger (Mobile) */}
       <StaffSidebar />
 

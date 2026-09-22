@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\RoomController;
+use App\Http\Controllers\Api\BookingController;
+use App\Http\Controllers\Api\ReportController;
 
 // Rutas de Cuentas de Personal y Gestión de Inventario
 Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
@@ -13,6 +15,13 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
     Route::put('/rooms/{id}', [RoomController::class, 'update']);
     Route::patch('/rooms/{id}/status', [RoomController::class, 'updateStatus']);
     Route::delete('/rooms/{id}', [RoomController::class, 'destroy']);
+
+    // Gestión de Reservas
+    Route::get('/bookings', [BookingController::class, 'indexStaff']);
+
+    // Gestión de Reportes y Caja
+    Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
+    Route::post('/reports/close-register', [ReportController::class, 'closeRegister']);
 
     // Gestión de Cuentas de Personal
     Route::get('/', [StaffController::class, 'index']);

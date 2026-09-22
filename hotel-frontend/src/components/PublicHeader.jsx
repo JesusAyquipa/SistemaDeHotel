@@ -69,12 +69,23 @@ export default function PublicHeader() {
                   {/* Link al panel de administración si tiene rol de staff o admin */}
                   {user.roles && (user.roles.includes('admin') || user.roles.includes('staff') || user.roles.includes('recepcionista') || !user.roles.includes('cliente')) && (
                     <Link 
-                      to="/recepcionista/habitaciones"
+                      to={user.roles.includes('admin') ? "/admin/habitaciones" : "/recepcionista/habitaciones"}
                       onClick={() => setDropdownOpen(false)}
                       className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
                     >
                       <span className="material-symbols-outlined text-[16px]">admin_panel_settings</span>
                       Panel de Administración
+                    </Link>
+                  )}
+
+                  {user.roles && user.roles.includes('cliente') && (
+                    <Link 
+                      to="/cliente/mis-reservas"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">luggage</span>
+                      Mis Reservas
                     </Link>
                   )}
 

@@ -1,9 +1,9 @@
 // Imágenes representativas por defecto según el tipo de cama/suite si no hay URL en BD
 const DEFAULT_IMAGES = {
-  individual: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
-  doble: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800&q=80',
-  king: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-  default: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
+  individual: 'https://images.weserv.nl/?url=images.unsplash.com/photo-1590490360182-c33d57733427&w=800&q=80&fit=cover',
+  doble: 'https://images.weserv.nl/?url=images.unsplash.com/photo-1566665797739-1674de7a421a&w=800&q=80&fit=cover',
+  king: 'https://images.weserv.nl/?url=images.unsplash.com/photo-1582719478250-c89cae4dc85b&w=800&q=80&fit=cover',
+  default: 'https://images.weserv.nl/?url=images.unsplash.com/photo-1618773928121-c32242e63f39&w=800&q=80&fit=cover',
 };
 
 export default function RoomCard({ room, onSelect }) {

@@ -142,7 +142,7 @@ export default function StaffManagement() {
   };
 
   return (
-    <div className="bg-[#EDEBE6] text-[#1b1c19] antialiased min-h-screen flex flex-col md:flex-row overflow-x-hidden font-sans">
+    <div className="bg-[#EDEBE6] text-[#1b1c19] antialiased h-screen flex flex-col md:flex-row overflow-hidden font-sans">
       <StaffSidebar />
 
       <main className="flex-1 p-4 sm:p-8 md:p-12 relative overflow-y-auto max-w-5xl mx-auto w-full">

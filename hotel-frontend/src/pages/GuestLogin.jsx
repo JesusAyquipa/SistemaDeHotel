@@ -46,9 +46,15 @@ export default function GuestLogin() {
     
     if (result.success) {
       const user = result.user;
-      const hasStaffRole = user?.roles?.some(role => ['admin', 'recepcionista'].includes(role));
+      const isAdmin = user?.roles?.includes('admin');
+      const isRecepcionista = user?.roles?.includes('recepcionista');
       
-      const from = location.state?.from?.pathname || (hasStaffRole ? '/recepcionista/habitaciones' : '/habitaciones');
+      let defaultPath = '/habitaciones'; // fallback to catalog
+      if (isAdmin) defaultPath = '/admin/habitaciones';
+      else if (isRecepcionista) defaultPath = '/recepcionista/habitaciones';
+      else if (user?.roles?.includes('cliente')) defaultPath = '/cliente/mis-reservas';
+      
+      const from = location.state?.from?.pathname || defaultPath;
       navigate(from, { replace: true });
     } else {
       setError(result.error || 'Ocurrió un error. Verifica tus datos.');

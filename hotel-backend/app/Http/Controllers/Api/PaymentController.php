@@ -256,8 +256,7 @@ class PaymentController extends Controller
             ]);
 
             $booking->update(['status' => 'confirmed']);
-
-            $booking->room->update(['status' => 'reservada']);
+            // No cambiamos el estado base de la habitación
         });
 
         $booking->load(['guest', 'room', 'latestPayment']);

@@ -28,7 +28,7 @@
                 <p><strong>Código de Reserva:</strong> {{ $booking->booking_code }}</p>
                 <p><strong>Check-in:</strong> {{ \Carbon\Carbon::parse($booking->check_in)->format('d/m/Y') }} a partir de las 15:00</p>
                 <p><strong>Check-out:</strong> {{ \Carbon\Carbon::parse($booking->check_out)->format('d/m/Y') }} hasta las 12:00</p>
-                <p><strong>Habitación:</strong> {{ $booking->room->room_number }} ({{ $booking->room->type }})</p>
+                <p><strong>Habitación:</strong> {{ $booking->room->name }} - Hab. {{ $booking->room->room_number }} ({{ $booking->room->bed_type }})</p>
                 <p><strong>Monto Total:</strong> ${{ number_format($booking->total_amount, 2) }}</p>
             </div>
             

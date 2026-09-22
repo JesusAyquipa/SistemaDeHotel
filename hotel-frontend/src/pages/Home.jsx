@@ -24,10 +24,10 @@ export default function Home() {
               <span>🛏️</span> Catálogo de Habitaciones (/habitaciones)
             </Link>
             <Link
-              to="/recepcionista/huespedes/nuevo"
+              to="/login"
               className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold text-sm transition shadow-amber-500/30 shadow-lg flex items-center gap-2"
             >
-              <span>🏨</span> Registrar Huésped (Staff)
+              <span>🏨</span> Panel de Staff (Login)
             </Link>
             <Link
               to="/ping"

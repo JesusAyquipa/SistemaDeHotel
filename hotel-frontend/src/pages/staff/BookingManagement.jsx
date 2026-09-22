@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import EditBookingModal from '../../components/staff/EditBookingModal';
 import StaffSidebar from '../../components/StaffSidebar';
+import api from '../../services/api';
 
 export default function BookingManagement() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -9,14 +10,65 @@ export default function BookingManagement() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchBookings = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/staff/bookings');
+      // Mapear los datos reales al formato que espera la tabla
+      const mappedBookings = response.data.bookings.map(booking => {
+        let statusColor = '';
+        let displayStatus = booking.status;
+        
+        switch (booking.status) {
+          case 'confirmed':
+          case 'confirmada':
+            statusColor = 'text-[#2E7A4A] bg-[#2E7A4A]/20';
+            displayStatus = 'Confirmada';
+            break;
+          case 'pending_payment':
+            statusColor = 'text-[#755b00] bg-[#755b00]/20';
+            displayStatus = 'Pendiente';
+            break;
+          case 'checked_in':
+            statusColor = 'text-[#14213D] bg-[#14213D]/10';
+            displayStatus = 'Check-in';
+            break;
+          case 'cancelled':
+          case 'cancelada':
+            statusColor = 'text-[#ba1a1a] bg-[#ba1a1a]/20';
+            displayStatus = 'Cancelada';
+            break;
+          case 'completed':
+            statusColor = 'text-[#14213D] bg-[#14213D]/20';
+            displayStatus = 'Completada';
+            break;
+          default:
+            statusColor = 'text-gray-600 bg-gray-200';
+        }
+
+        return {
+          id: booking.id,
+          code: booking.booking_code,
+          guest: booking.guest ? `${booking.guest.name} ${booking.guest.surname}` : 'Desconocido',
+          checkIn: booking.check_in.substring(0, 10),
+          checkOut: booking.check_out.substring(0, 10),
+          room: booking.room ? booking.room.name : 'No asignada',
+          status: displayStatus,
+          statusColor: statusColor,
+          rawBooking: booking // Para el modal de edición
+        };
+      });
+      setBookings(mappedBookings);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      alert('Error al cargar las reservas.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // In a real scenario we'd fetch from /api/bookings
-    setBookings([
-      { id: 1, code: 'RES-001', guest: 'Juan Pérez', checkIn: '2024-10-12', checkOut: '2024-10-15', room: 'Standard 101', status: 'Confirmada', statusColor: 'text-[#2E7A4A] bg-[#2E7A4A]/20' },
-      { id: 2, code: 'RES-002', guest: 'María Gómez', checkIn: '2024-10-14', checkOut: '2024-10-18', room: 'Deluxe 205', status: 'Pendiente', statusColor: 'text-[#755b00] bg-[#755b00]/20' },
-      { id: 3, code: 'RES-003', guest: 'Carlos Ruiz', checkIn: '2024-10-10', checkOut: '2024-10-12', room: 'Suite 301', status: 'Check-in', statusColor: 'text-[#14213D] bg-[#14213D]/10' },
-    ]);
-    setLoading(false);
+    fetchBookings();
   }, []);
 
   const openEditModal = (booking = null) => {
@@ -29,12 +81,15 @@ export default function BookingManagement() {
     setIsEditModalOpen(false);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (code) => {
     if (confirm('¿Está seguro que desea cancelar esta reserva?')) {
       try {
-        alert('Lógica de cancelación a implementar en el backend');
+        const response = await api.post(`/bookings/${code}/cancel`);
+        alert(response.data.message || 'Reserva cancelada con éxito');
+        fetchBookings();
       } catch (error) {
-        console.error(error);
+        console.error('Error canceling booking:', error);
+        alert(error.response?.data?.message || 'Hubo un error al intentar cancelar la reserva');
       }
     }
   };
@@ -132,7 +187,7 @@ export default function BookingManagement() {
                             <button className="text-[#755b00] hover:text-[#c9a227] transition-colors p-1 ml-1" title="Editar" onClick={() => openEditModal(booking)}>
                               <span className="material-symbols-outlined text-lg">edit</span>
                             </button>
-                            <button onClick={() => handleDelete(booking.id)} className="text-[#ba1a1a] hover:opacity-80 transition-colors p-1 ml-1" title="Cancelar">
+                            <button onClick={() => handleDelete(booking.code)} className="text-[#ba1a1a] hover:opacity-80 transition-colors p-1 ml-1" title="Cancelar">
                               <span className="material-symbols-outlined text-lg">delete</span>
                             </button>
                           </td>

@@ -24,7 +24,25 @@ export const getBookingByCode = async (code) => {
   return response.data;
 };
 
+export const getMyBookings = async () => {
+  const response = await api.get('/my-bookings');
+  return response.data.bookings;
+};
+
+export const cancelBooking = async (code) => {
+  const response = await api.post(`/bookings/${code}/cancel`);
+  return response.data;
+};
+
+export const updateBooking = async (code, data) => {
+  const response = await api.put(`/bookings/${code}`, data);
+  return response.data;
+};
+
 export default {
   createBooking,
   getBookingByCode,
+  getMyBookings,
+  cancelBooking,
+  updateBooking,
 };

@@ -6,7 +6,9 @@ import RoomManagement from '../pages/staff/RoomManagement';
 import RoomsListing from '../pages/RoomsListing';
 import GuestLogin from '../pages/GuestLogin';
 import BookingManagement from '../pages/staff/BookingManagement';
+import ReportsDashboard from '../pages/staff/ReportsDashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
+import MyBookings from '../pages/MyBookings';
 
 export default function AppRoutes({ pingStatus, setPingStatus }) {
   return (
@@ -17,27 +19,59 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       {/* Catálogo Público de Habitaciones con Disponibilidad para Huéspedes */}
       <Route path="/habitaciones" element={<RoomsListing />} />
 
-      {/* Rutas Panel de Recepción y Control de Inventario protegidas */}
-      <Route path="/recepcionista/habitaciones" element={
-        <ProtectedRoute allowedRoles={['recepcionista', 'admin']}>
+      {/* Rutas de Perfil del Huésped (Cliente) */}
+      <Route path="/cliente/mis-reservas" element={
+        <ProtectedRoute allowedRoles={['cliente', 'admin', 'recepcionista', 'staff']}>
+          <MyBookings />
+        </ProtectedRoute>
+      } />
+
+      {/* ---------------- RUTAS ADMIN ---------------- */}
+      <Route path="/admin/habitaciones" element={
+        <ProtectedRoute allowedRoles={['admin']}>
           <RoomManagement />
         </ProtectedRoute>
       } />
-      <Route path="/recepcionista/reservas" element={
-        <ProtectedRoute allowedRoles={['recepcionista', 'admin']}>
+      <Route path="/admin/reservas" element={
+        <ProtectedRoute allowedRoles={['admin']}>
           <BookingManagement />
         </ProtectedRoute>
       } />
-      <Route path="/recepcionista/huespedes/nuevo" element={
-        <ProtectedRoute allowedRoles={['recepcionista', 'admin']}>
+      <Route path="/admin/reportes" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <ReportsDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/huespedes/nuevo" element={
+        <ProtectedRoute allowedRoles={['admin']}>
           <RegisterGuest />
         </ProtectedRoute>
       } />
-      <Route path="/recepcionista/personal" element={
+      <Route path="/admin/personal" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <StaffManagement />
         </ProtectedRoute>
       } />
+
+      {/* ---------------- RUTAS RECEPCIONISTA ---------------- */}
+      <Route path="/recepcionista/habitaciones" element={
+        <ProtectedRoute allowedRoles={['recepcionista']}>
+          <RoomManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/recepcionista/reservas" element={
+        <ProtectedRoute allowedRoles={['recepcionista']}>
+          <BookingManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/recepcionista/huespedes/nuevo" element={
+        <ProtectedRoute allowedRoles={['recepcionista']}>
+          <RegisterGuest />
+        </ProtectedRoute>
+      } />
+
+      {/* Compatibilidad hacia atrás (Redirecciones) para links antiguos */}
+      <Route path="/mis-reservas" element={<Navigate to="/cliente/mis-reservas" replace />} />
 
       {/* Rutas Públicas / Demo */}
       <Route path="/" element={<Navigate to="/habitaciones" replace />} />
