@@ -7,6 +7,7 @@ use App\Http\Requests\StoreBookingRequest;
 use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\Room;
+use App\Models\Payment;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\BookingConfirmedMail;
+use App\Mail\BookingModifiedMail;
 
 class BookingController extends Controller
 {
@@ -75,29 +77,29 @@ class BookingController extends Controller
             $nights = 1;
         }
 
-        // Validar si la habitación ya se encuentra reservada en el rango de fechas solicitado
-        $isOverlapping = Booking::where('room_id', $room->id)
-            ->where(function ($query) use ($validated) {
-                $query->where('check_in', '<', $validated['check_out'])
-                      ->where('check_out', '>', $validated['check_in']);
-            })
-            ->whereIn('status', ['confirmed', 'checked_in', 'reservada'])
-            ->exists();
-
-        if ($isOverlapping) {
-            return response()->json([
-                'message' => 'La habitación seleccionada ya no se encuentra disponible en las fechas especificadas.',
-                'errors'  => [
-                    'dates' => ['Conflicto de fechas con una reserva existente.']
-                ]
-            ], 422);
-        }
-
         $totalAmount = $room->price_per_night * $nights;
 
-        // Iniciar transacción de base de datos para garantizar consistencia atómica
-        $booking = DB::transaction(function () use ($validated, $room, $nights, $totalAmount) {
-            // 1. Obtener o registrar la ficha del huésped
+        try {
+            // Iniciar transacción de base de datos para garantizar consistencia atómica
+            $booking = DB::transaction(function () use ($validated, $room, $totalAmount) {
+                // BLOQUEO PESIMISTA:
+                // Bloqueamos la fila de la habitación para prevenir 'race conditions' (Double-booking).
+                Room::where('id', $room->id)->lockForUpdate()->first();
+
+                // Validar superposición de fechas (debe hacerse DENTRO del lock)
+                $isOverlapping = Booking::where('room_id', $room->id)
+                    ->where(function ($query) use ($validated) {
+                        $query->where('check_in', '<', $validated['check_out'])
+                              ->where('check_out', '>', $validated['check_in']);
+                    })
+                    ->whereIn('status', ['confirmed', 'checked_in', 'reservada', 'pending_payment'])
+                    ->exists();
+
+                if ($isOverlapping) {
+                    throw new \Exception('La habitación seleccionada ya no se encuentra disponible en las fechas especificadas.');
+                }
+
+                // 1. Obtener o registrar la ficha del huésped
             $guest = Guest::where('document_number', $validated['document_number'])
                 ->orWhere('email', $validated['guest_email'])
                 ->first();
@@ -156,6 +158,17 @@ class BookingController extends Controller
 
             return $newBooking;
         });
+        } catch (\Exception $e) {
+            if ($e->getMessage() === 'La habitación seleccionada ya no se encuentra disponible en las fechas especificadas.') {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors'  => [
+                        'dates' => ['Conflicto de fechas con una reserva existente.']
+                    ]
+                ], 422);
+            }
+            throw $e;
+        }
 
         // Cargar las relaciones para la respuesta
         $booking->load(['guest', 'room']);
@@ -282,27 +295,86 @@ class BookingController extends Controller
         }
 
         $totalAmount = $room->price_per_night * $nights;
+        $priceDifference = $totalAmount - $booking->total_amount;
+        $paymentConfirmed = $request->boolean('payment_confirmed', false);
 
-        DB::transaction(function () use ($booking, $validated, $newRoomId, $room, $totalAmount) {
-            // Si la habitación cambió, no modificamos el estado base (sigue siendo disponible/mantenimiento, etc.)
-            // Las reservas en sí ya manejan la disponibilidad por fechas.
+        // Si el precio sube, requerimos pago por la diferencia ANTES de actualizar las fechas en BD
+        if ($priceDifference > 0 && !$paymentConfirmed) {
+            return response()->json([
+                'message' => 'Se requiere el pago de la diferencia para confirmar la modificación.',
+                'requires_payment' => true,
+                'amount_difference' => $priceDifference,
+                'new_total_amount' => $totalAmount,
+                'new_check_in' => $validated['check_in'],
+                'new_check_out' => $validated['check_out'],
+                'room_id' => $newRoomId,
+            ]);
+        }
 
+        // Si el precio baja, aplicamos política de reembolso similar a la de cancelación
+        $refundMessage = null;
+        if ($priceDifference < 0) {
+            $checkInDate = Carbon::parse($booking->check_in);
+            $hoursUntilCheckIn = Carbon::now()->diffInHours($checkInDate, false);
+            
+            $refundAmount = abs($priceDifference);
+            if ($hoursUntilCheckIn >= 48) {
+                // Reembolso 100% de la diferencia
+                $refundMessage = "Se ha generado un reembolso del 100% de la diferencia (S/ {$refundAmount}) por reducir los días de su estadía con más de 48h de anticipación.";
+            } elseif ($hoursUntilCheckIn > 0) {
+                // Reembolso 50% de la diferencia
+                $refundAmount = $refundAmount * 0.5;
+                $refundMessage = "Se ha generado un reembolso del 50% de la diferencia (S/ {$refundAmount}) por reducir los días de su estadía con menos de 48h de anticipación.";
+            } else {
+                $refundMessage = "No se generan reembolsos por reducir días durante la estadía según las políticas del hotel.";
+            }
+        }
+
+        $newPayment = null;
+        DB::transaction(function () use ($booking, $validated, $newRoomId, $totalAmount, $priceDifference, $paymentConfirmed, &$newPayment) {
             $booking->update([
                 'check_in'     => $validated['check_in'],
                 'check_out'    => $validated['check_out'],
                 'room_id'      => $newRoomId,
                 'total_amount' => $totalAmount,
             ]);
+            
+            if ($priceDifference > 0 && $paymentConfirmed) {
+                $newPayment = Payment::create([
+                    'booking_id'       => $booking->id,
+                    'amount'           => $priceDifference,
+                    'payment_method'   => 'card',
+                    'status'           => 'completed',
+                    'transaction_id'   => 'txn_mock_' . uniqid(),
+                    'gateway_provider' => 'mock',
+                    'currency'         => 'PEN',
+                    'receipt_number'   => Payment::generateReceiptNumber(),
+                    'paid_at'          => now(),
+                ]);
+            }
         });
 
+        $booking = $booking->fresh(['room', 'guest']);
+
+        try {
+            $msg = $priceDifference > 0 
+                ? "Se ha cobrado satisfactoriamente la diferencia de S/ " . number_format($priceDifference, 2) . " por la extensión de su reserva."
+                : ($refundMessage ?? "Las fechas de su reserva han sido modificadas.");
+                
+            Mail::to($booking->guest->email)->send(new BookingModifiedMail($booking, $msg, $priceDifference));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('No se pudo enviar correo de modificación: ' . $e->getMessage());
+        }
+
         return response()->json([
-            'message' => 'Reserva modificada con éxito',
-            'booking' => $booking->fresh(['room']),
+            'message' => 'Reserva modificada con éxito. ' . $refundMessage,
+            'booking' => $booking,
+            'payment' => $newPayment,
             'summary' => [
                 'nights'          => $nights,
                 'price_per_night' => $room->price_per_night,
                 'total_amount'    => $totalAmount,
-            ]
+            ],
         ]);
     }
 

@@ -5,11 +5,8 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
   const [checkIn, setCheckIn] = useState(booking?.checkIn || '');
   const [checkOut, setCheckOut] = useState(booking?.checkOut || '');
   
-  // En el diseño actual el roomType es un string, pero el backend pide room_id.
-  // Como estamos creando una reserva manual general, usaremos un select temporal
-  // En un sistema completo esto cargaría las habitaciones disponibles de la base de datos.
-  const [roomId, setRoomId] = useState('1'); // ID de ejemplo
-  const [roomType, setRoomType] = useState('Standard');
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [roomId, setRoomId] = useState('');
 
   // Datos del huésped
   const [guestName, setGuestName] = useState('');
@@ -25,12 +22,55 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Helper para simular capacidades de habitaciones
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+
+  useEffect(() => {
+    if (checkIn && checkOut && !booking) {
+      api.get(`/rooms/available?check_in=${checkIn}&check_out=${checkOut}`)
+        .then(res => {
+          setAvailableRooms(res.data);
+          if (res.data.length > 0) {
+            setRoomId(res.data[0].id.toString());
+          } else {
+            setRoomId('');
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  }, [checkIn, checkOut, booking]);
+
+  const handleSearchGuest = async (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (query.length >= 2) {
+      try {
+        const res = await api.get(`/guests/search?query=${query}`);
+        setSearchResults(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setSearchResults([]);
+    }
+  };
+
+  const selectGuest = (guest) => {
+    setGuestName(guest.name);
+    setGuestSurname(guest.surname);
+    setDocumentType(guest.document_type);
+    setDocumentNumber(guest.document_number);
+    setGuestEmail(guest.email);
+    setGuestPhone(guest.phone || '');
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  // Helper para capacidades de habitaciones dinámicas
   const getRoomCapacity = (id) => {
-    if (id === '1') return 2; // Standard
-    if (id === '2') return 3; // Deluxe
-    if (id === '3') return 4; // Suite
-    return 2;
+    if (booking && booking.room) return booking.room.capacity;
+    const room = availableRooms.find(r => r.id.toString() === id);
+    return room ? room.capacity : 2;
   };
 
   const handleAddCompanion = () => {
@@ -197,11 +237,18 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                 <select 
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
-                  className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 pr-8 text-[#1b1c19] font-sans appearance-none cursor-pointer"
+                  disabled={availableRooms.length === 0}
+                  className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 pr-8 text-[#1b1c19] font-sans appearance-none cursor-pointer disabled:opacity-50"
                 >
-                  <option value="1">Habitación 101 - Standard</option>
-                  <option value="2">Habitación 205 - Deluxe</option>
-                  <option value="3">Habitación 301 - Suite</option>
+                  {availableRooms.length === 0 ? (
+                    <option value="">No hay habitaciones disponibles</option>
+                  ) : (
+                    availableRooms.map(room => (
+                      <option key={room.id} value={room.id}>
+                        Habitación {room.room_number} - {room.name} (S/ {room.price_per_night})
+                      </option>
+                    ))
+                  )}
                 </select>
                 <span className="material-symbols-outlined absolute right-0 top-1/2 -translate-y-1/2 text-[#1b1c19] pointer-events-none">
                   expand_more
@@ -218,6 +265,31 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                   <span className="material-symbols-outlined text-[#755b00]">person</span>
                   3. Datos del Huésped Principal
                 </h3>
+                
+                {/* Buscador de Huésped */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar huésped existente por DNI, Nombre o Apellido..."
+                    value={searchQuery}
+                    onChange={handleSearchGuest}
+                    className="w-full bg-[#eae8e3] border border-[#d1c5af] p-3 text-sm focus:outline-none focus:border-[#14213D] mb-2"
+                  />
+                  {searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 bg-[#fbf9f4] border border-[#d1c5af] max-h-48 overflow-y-auto z-10 shadow-lg">
+                      {searchResults.map(guest => (
+                        <div
+                          key={guest.id}
+                          className="p-3 hover:bg-[#eae8e3] cursor-pointer border-b border-[#d1c5af]/50"
+                          onClick={() => selectGuest(guest)}
+                        >
+                          <div className="font-semibold text-[#1b1c19]">{guest.name} {guest.surname}</div>
+                          <div className="text-xs text-[#4d4635]">{guest.document_type}: {guest.document_number} | {guest.email}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col gap-2">

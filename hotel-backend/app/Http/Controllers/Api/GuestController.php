@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGuestRequest;
 use App\Models\Guest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class GuestController extends Controller
 {
@@ -37,5 +38,26 @@ class GuestController extends Controller
             'message' => 'Huésped registrado correctamente en el sistema.',
             'data'    => $guest
         ], 201);
+    }
+
+    /**
+     * Busca huéspedes por número de documento, nombre o apellido.
+     * GET /api/guests/search?query=...
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $query = $request->query('query');
+
+        if (!$query || strlen($query) < 2) {
+            return response()->json([]);
+        }
+
+        $guests = Guest::where('document_number', 'LIKE', "%{$query}%")
+            ->orWhere('name', 'LIKE', "%{$query}%")
+            ->orWhere('surname', 'LIKE', "%{$query}%")
+            ->limit(10)
+            ->get();
+
+        return response()->json($guests);
     }
 }

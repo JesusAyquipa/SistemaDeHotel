@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import EditBookingModal from './staff/EditBookingModal';
 
 export default function StaffSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
 
@@ -53,7 +55,7 @@ export default function StaffSidebar() {
             <div className="font-mono text-xs text-[#4d4635] truncate">{displayName}</div>
           </div>
         </div>
-        <button className="w-full mt-3 btn-primary text-xs py-2">
+        <button onClick={() => setIsNewBookingModalOpen(true)} className="w-full mt-3 btn-primary text-xs py-2 cursor-pointer">
           + Nueva Reserva
         </button>
       </div>
@@ -204,6 +206,15 @@ export default function StaffSidebar() {
       <aside className="hidden md:flex flex-shrink-0 h-screen sticky top-0 z-20">
         {navContent}
       </aside>
+
+      {/* Global New Booking Modal */}
+      {isNewBookingModalOpen && (
+        <EditBookingModal 
+          isOpen={isNewBookingModalOpen} 
+          onClose={() => setIsNewBookingModalOpen(false)} 
+          booking={null}
+        />
+      )}
     </>
   );
 }

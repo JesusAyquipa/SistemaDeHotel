@@ -152,13 +152,19 @@ class RoomController extends Controller
      * Devuelve las fechas que ya se encuentran reservadas u ocupadas para una habitación.
      * GET /api/rooms/{id}/booked-dates
      */
-    public function bookedDates(int $id): JsonResponse
+    public function bookedDates(Request $request, int $id): JsonResponse
     {
         $room = Room::findOrFail($id);
-        $bookings = $room->bookings()
+        
+        $query = $room->bookings()
             ->whereIn('status', ['confirmed', 'checked_in', 'pending_payment'])
-            ->where('check_out', '>=', now()->toDateString())
-            ->get(['check_in', 'check_out']);
+            ->where('check_out', '>=', now()->toDateString());
+
+        if ($request->filled('exclude_booking_id')) {
+            $query->where('id', '!=', $request->query('exclude_booking_id'));
+        }
+
+        $bookings = $query->get(['check_in', 'check_out']);
 
         return response()->json(['booked_dates' => $bookings]);
     }

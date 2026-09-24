@@ -25,7 +25,8 @@ Route::get('/ping', [PingController::class, 'ping']);
 // Cargar subarchivos de rutas organizadas por módulo en routes/api/
 require __DIR__ . '/api/staff.php';
 
-// Registro de huéspedes
+// Registro y búsqueda de huéspedes
+Route::get('/guests/search', [GuestController::class, 'search']);
 Route::post('/guests', [GuestController::class, 'store']);
 
 // Habitaciones: catálogo de disponibilidad con filtros

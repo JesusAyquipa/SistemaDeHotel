@@ -24,8 +24,9 @@ export const getAvailableRooms = async (params = {}) => {
   return response.data;
 };
 
-export const getRoomBookedDates = async (roomId) => {
-  const response = await api.get(`/rooms/${roomId}/booked-dates`);
+export const getRoomBookedDates = async (roomId, excludeBookingId = null) => {
+  const params = excludeBookingId ? { exclude_booking_id: excludeBookingId } : {};
+  const response = await api.get(`/rooms/${roomId}/booked-dates`, { params });
   return response.data.booked_dates;
 };
 
