@@ -18,6 +18,8 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
 
     // Gestión de Reservas
     Route::get('/bookings', [BookingController::class, 'indexStaff']);
+    Route::get('/bookings/{id}/charges', [BookingController::class, 'getCharges']);
+    Route::post('/bookings/{id}/charges', [BookingController::class, 'addCharge']);
     Route::post('/bookings/{code}/check-in', [BookingController::class, 'checkIn']);
     Route::post('/bookings/{code}/check-out', [BookingController::class, 'checkOut']);
 

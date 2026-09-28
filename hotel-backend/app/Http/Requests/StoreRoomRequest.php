@@ -21,7 +21,8 @@ class StoreRoomRequest extends FormRequest
             'capacity'        => 'required|integer|min:1|max:10',
             'size_m2'         => 'nullable|numeric|min:1',
             'price_per_night' => 'required|numeric|min:0',
-            'image_url'       => 'nullable|url|max:500',
+            'image_url'       => 'nullable|string|max:500',
+            'image'           => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
             'status'          => 'required|string|in:disponible,ocupada,mantenimiento,limpieza,reservada',
         ];
     }

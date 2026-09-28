@@ -50,6 +50,7 @@ class PaymentController extends Controller
             'companions.*.surname' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'companions.*.document_type' => 'required_with:companions|string',
             'companions.*.document_number' => 'required_with:companions|string|max:20',
+            'coupon_code'     => 'nullable|string',
         ]);
 
         $room = Room::findOrFail($validated['room_id']);
@@ -70,7 +71,22 @@ class PaymentController extends Controller
         $checkIn = Carbon::parse($validated['check_in'])->startOfDay();
         $checkOut = Carbon::parse($validated['check_out'])->startOfDay();
         $nights = max(1, $checkIn->diffInDays($checkOut));
-        $totalAmount = $room->price_per_night * $nights;
+        $subTotal = $room->price_per_night * $nights;
+        $discountAmount = 0;
+        
+        $coupon = null;
+        if (!empty($validated['coupon_code'])) {
+            $coupon = \App\Models\Coupon::where('code', $validated['coupon_code'])->where('is_active', true)->first();
+            if ($coupon && $coupon->expires_at >= now() && (!$coupon->max_uses || $coupon->current_uses < $coupon->max_uses)) {
+                if ($coupon->discount_type === 'percentage') {
+                    $discountAmount = $subTotal * ($coupon->discount_value / 100);
+                } else {
+                    $discountAmount = $coupon->discount_value;
+                }
+            }
+        }
+        
+        $totalAmount = max(0, $subTotal - $discountAmount);
 
         // Verificar disponibilidad (sin conflictos de fechas)
         $isOverlapping = Booking::where('room_id', $room->id)
@@ -162,6 +178,11 @@ class PaymentController extends Controller
                 'currency'         => 'PEN',
             ]);
 
+            // Incrementar current_uses del cupón si es válido
+            if ($coupon) {
+                $coupon->increment('current_uses');
+            }
+
             return $newBooking;
         });
 
@@ -177,6 +198,8 @@ class PaymentController extends Controller
             'summary'        => [
                 'nights'          => $nights,
                 'price_per_night' => $room->price_per_night,
+                'sub_total'       => $subTotal,
+                'discount'        => $discountAmount,
                 'total_amount'    => $totalAmount,
                 'currency'        => 'PEN',
             ],

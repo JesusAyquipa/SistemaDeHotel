@@ -19,6 +19,11 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
   // Acompañantes
   const [companions, setCompanions] = useState([]);
   
+  // Cupones
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -93,6 +98,24 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
     setCompanions(newCompanions);
   };
 
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    try {
+      const res = await api.post('/coupons/validate', { code: couponCode.trim() });
+      setAppliedCoupon(res.data.coupon);
+      setCouponError('');
+    } catch (err) {
+      setCouponError(err.response?.data?.error || 'Cupón inválido');
+      setAppliedCoupon(null);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
@@ -119,7 +142,8 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
         document_number: documentNumber,
         guest_phone: guestPhone,
         companions: companions,
-        notes: "Reserva creada manualmente desde recepción"
+        notes: "Reserva creada manualmente desde recepción",
+        coupon_code: appliedCoupon ? appliedCoupon.code : null
       });
 
       alert('¡Reserva creada exitosamente y correo de confirmación enviado!');
@@ -378,6 +402,50 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                   Añadir Acompañante
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Cupones (Solo para nuevas reservas) */}
+          {!booking && (
+            <div className="space-y-4">
+              <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#755b00]">sell</span>
+                4. Cupón de Descuento (Opcional)
+              </h3>
+              
+              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4">
+                 {!appliedCoupon ? (
+                   <div>
+                     <div className="flex gap-2">
+                       <input 
+                         type="text" 
+                         placeholder="Ingresa el código" 
+                         value={couponCode}
+                         onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                         className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans uppercase"
+                       />
+                       <button 
+                         type="button"
+                         onClick={handleApplyCoupon}
+                         className="bg-[#14213d] hover:bg-[#0a1128] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors"
+                       >
+                         Aplicar
+                       </button>
+                     </div>
+                     {couponError && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{couponError}</p>}
+                   </div>
+                 ) : (
+                   <div className="flex items-center justify-between bg-[#e5efff] border border-[#0047b3] p-2">
+                     <div className="flex items-center gap-2">
+                       <span className="material-symbols-outlined text-[#0047b3] text-sm">check_circle</span>
+                       <span className="font-mono text-xs font-bold text-[#0047b3]">{appliedCoupon.code} aplicado</span>
+                     </div>
+                     <button type="button" onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]">
+                       <span className="material-symbols-outlined text-sm">delete</span>
+                     </button>
+                   </div>
+                 )}
+              </div>
             </div>
           )}
 

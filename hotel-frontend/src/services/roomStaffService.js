@@ -19,12 +19,24 @@ export const getStaffRooms = async (params = {}) => {
 };
 
 /**
+ * Obtiene el detalle de una habitación específica con sus reservas.
+ * @param {number|string} id - ID de la habitación
+ */
+export const getRoomDetails = async (id) => {
+  const response = await api.get(`/staff/rooms/${id}`);
+  return response.data;
+};
+
+/**
  * Registra una nueva habitación en el inventario.
  * @param {Object} roomData - Datos de la habitación
  * @returns {Promise<Object>} Habitación creada
  */
 export const createRoom = async (roomData) => {
-  const response = await api.post('/staff/rooms', roomData);
+  const isFormData = roomData instanceof FormData;
+  const response = await api.post('/staff/rooms', roomData, {
+    headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : {},
+  });
   return response.data;
 };
 
@@ -35,6 +47,16 @@ export const createRoom = async (roomData) => {
  * @returns {Promise<Object>} Habitación actualizada
  */
 export const updateRoom = async (id, roomData) => {
+  const isFormData = roomData instanceof FormData;
+  
+  if (isFormData) {
+    roomData.append('_method', 'PUT');
+    const response = await api.post(`/staff/rooms/${id}`, roomData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
   const response = await api.put(`/staff/rooms/${id}`, roomData);
   return response.data;
 };
@@ -62,6 +84,7 @@ export const deleteRoom = async (id) => {
 
 export default {
   getStaffRooms,
+  getRoomDetails,
   createRoom,
   updateRoom,
   updateRoomStatus,

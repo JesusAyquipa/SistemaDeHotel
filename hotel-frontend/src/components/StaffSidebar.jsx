@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import EditBookingModal from './staff/EditBookingModal';
+import ProfileModal from './ProfileModal';
 
 export default function StaffSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
 
@@ -44,18 +46,24 @@ export default function StaffSidebar() {
         </button>
       </div>
 
-      {/* User Info / Shift Badge */}
       <div className="mb-6 px-2">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-[#e4e2dd] flex items-center justify-center overflow-hidden border border-[#d1c5af] flex-shrink-0">
-            <span className="material-symbols-outlined text-[#525e7d]">account_circle</span>
+        <div 
+          onClick={() => setIsProfileModalOpen(true)}
+          className="flex items-center gap-3 mb-2 cursor-pointer hover:bg-[#eae8e3] p-1.5 rounded-lg transition-colors -ml-1.5 group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#e4e2dd] flex items-center justify-center overflow-hidden border border-[#d1c5af] flex-shrink-0 group-hover:border-[#987d35] transition-colors">
+            {user?.image_url ? (
+              <img src={`http://localhost:8000${user.image_url}`} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <span className="material-symbols-outlined text-[#525e7d]">account_circle</span>
+            )}
           </div>
           <div className="truncate">
             <div className="font-serif font-semibold text-sm text-[#1b1c19] truncate">{displayRole}</div>
-            <div className="font-mono text-xs text-[#4d4635] truncate">{displayName}</div>
+            <div className="font-mono text-xs text-[#4d4635] truncate group-hover:text-[#987d35] transition-colors">{displayName}</div>
           </div>
         </div>
-        <button onClick={() => setIsNewBookingModalOpen(true)} className="w-full mt-3 btn-primary text-xs py-2 cursor-pointer">
+        <button onClick={() => setIsNewBookingModalOpen(true)} className="w-full mt-2 btn-primary text-xs py-2 cursor-pointer">
           + Nueva Reserva
         </button>
       </div>
@@ -138,18 +146,19 @@ export default function StaffSidebar() {
       {/* Footer Navigation */}
       <div className="mt-auto pt-4 border-t border-[#d1c5af] px-1">
         <ul className="space-y-1">
-          {isAdmin && (
-            <li>
-              <Link
-                to="/configuracion"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-3 px-3 py-2 rounded text-[#4d4635] hover:bg-[#eae8e3] transition-all"
-              >
-                <span className="material-symbols-outlined">settings</span>
-                <span className="font-mono text-xs uppercase tracking-wider">Configuración</span>
-              </Link>
-            </li>
-          )}
+          <li>
+            <Link
+              to="/configuracion"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2 rounded transition-all ${activePath.includes('/configuracion')
+                  ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                  : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                }`}
+            >
+              <span className="material-symbols-outlined">settings</span>
+              <span className="font-mono text-xs uppercase tracking-wider">Configuración</span>
+            </Link>
+          </li>
           <li>
             <button
               onClick={() => {
@@ -215,6 +224,12 @@ export default function StaffSidebar() {
           booking={null}
         />
       )}
+
+      {/* Profile Modal */}
+      <ProfileModal 
+        isOpen={isProfileModalOpen} 
+        onClose={() => setIsProfileModalOpen(false)} 
+      />
     </>
   );
 }

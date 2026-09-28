@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateRoomRequest;
 use App\Models\Room;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class RoomController extends Controller
@@ -177,6 +178,11 @@ class RoomController extends Controller
     {
         $validated = $request->validated();
 
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('rooms', 'public');
+            $validated['image_url'] = url('storage/' . $path);
+        }
+
         $room = Room::create($validated);
 
         return response()->json([
@@ -206,6 +212,17 @@ class RoomController extends Controller
         $oldStatus = $room->status;
 
         $validated = $request->validated();
+
+        if ($request->hasFile('image')) {
+            // Eliminar imagen anterior si es local
+            if ($room->image_url && str_contains($room->image_url, url('storage/'))) {
+                $oldPath = str_replace(url('storage/') . '/', '', $room->image_url);
+                Storage::disk('public')->delete($oldPath);
+            }
+            $path = $request->file('image')->store('rooms', 'public');
+            $validated['image_url'] = url('storage/' . $path);
+        }
+
         $room->update($validated);
 
         // Si cambió el estado, emitir evento broadcast

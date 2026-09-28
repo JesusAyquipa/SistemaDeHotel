@@ -92,8 +92,23 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('auth_token');
   };
 
+  const updateProfile = async (formData) => {
+    try {
+      const response = await api.post('/me/update', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setUser(response.data.user);
+      return { success: true, user: response.data.user };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Error al actualizar perfil'
+      };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

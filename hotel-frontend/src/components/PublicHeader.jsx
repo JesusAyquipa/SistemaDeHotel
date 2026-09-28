@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import ProfileModal from './ProfileModal';
 
 export default function PublicHeader() {
   const { user, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   return (
     <header className="bg-[#fbf9f4] border-b border-[#d1c5af] sticky top-0 z-50 shadow-sm">
       <div className="max-w-[1200px] mx-auto flex justify-between items-center px-4 sm:px-6 py-4">
@@ -66,6 +68,14 @@ export default function PublicHeader() {
                     <p className="font-serif font-bold text-sm text-[#1b1c19] truncate">{user.name} {user.surname}</p>
                   </div>
                   
+                  <button 
+                    onClick={() => { setDropdownOpen(false); setIsProfileModalOpen(true); }}
+                    className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">person</span>
+                    Mi Perfil
+                  </button>
+
                   {/* Link al panel de administración si tiene rol de staff o admin */}
                   {user.roles && (user.roles.includes('admin') || user.roles.includes('staff') || user.roles.includes('recepcionista') || !user.roles.includes('cliente')) && (
                     <Link 
@@ -109,6 +119,11 @@ export default function PublicHeader() {
           </Link>
         </div>
       </div>
+      {/* Modal de Perfil */}
+      <ProfileModal 
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </header>
   );
 }

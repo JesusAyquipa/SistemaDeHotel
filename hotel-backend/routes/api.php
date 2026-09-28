@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\SettingsController;
 
 // Autenticación
 Route::post('/login', [AuthController::class, 'login']);
@@ -16,8 +17,22 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::post('/me/update', [AuthController::class, 'updateProfile']);
     Route::get('/my-bookings', [BookingController::class, 'myBookings']);
+    
+    // Settings (Admin)
+    Route::get('/settings', [SettingsController::class, 'index']);
+    Route::post('/settings/seasons', [SettingsController::class, 'storeSeason']);
+    Route::put('/settings/seasons/{id}', [SettingsController::class, 'updateSeason']);
+    Route::delete('/settings/seasons/{id}', [SettingsController::class, 'destroySeason']);
+    
+    Route::post('/settings/coupons', [SettingsController::class, 'storeCoupon']);
+    Route::put('/settings/coupons/{id}', [SettingsController::class, 'updateCoupon']);
+    Route::delete('/settings/coupons/{id}', [SettingsController::class, 'destroyCoupon']);
 });
+
+// Endpoint público para validar cupones
+Route::post('/coupons/validate', [SettingsController::class, 'validateCoupon']);
 
 // Endpoint de prueba de arquitectura /api/ping
 Route::get('/ping', [PingController::class, 'ping']);

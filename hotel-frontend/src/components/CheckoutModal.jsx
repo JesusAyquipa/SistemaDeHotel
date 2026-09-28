@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import api from '../services/api';
 import { createCheckoutIntent, processMockPayment } from '../services/paymentService';
 import { getRoomBookedDates } from '../services/rooms';
 import DatePicker from 'react-datepicker';
@@ -150,6 +151,11 @@ export default function CheckoutModal({
     card_holder: '',
   });
 
+  // ===== Cupones =====
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+
   // ===== Fechas Reservadas (Bloqueadas) =====
   const [bookedIntervals, setBookedIntervals] = useState([]);
 
@@ -187,7 +193,19 @@ export default function CheckoutModal({
     const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     return diff > 0 ? diff : 1;
   })();
-  const totalAmount = nights * Number(room.price_per_night);
+  let subTotal = nights * Number(room.price_per_night);
+  let discountAmount = 0;
+  
+  if (appliedCoupon) {
+     if (appliedCoupon.discount_type === 'percentage') {
+         discountAmount = subTotal * (parseFloat(appliedCoupon.discount_value) / 100);
+     } else {
+         discountAmount = parseFloat(appliedCoupon.discount_value);
+     }
+  }
+  
+  const totalAmount = Math.max(0, subTotal - discountAmount);
+  
   const cardBrand = detectCardBrand(cardData.card_number);
   const cardBank = detectCardBank(cardData.card_number);
   const roomImage = room.image_url || DEFAULT_IMAGES[room.bed_type] || DEFAULT_IMAGES.default;
@@ -249,6 +267,24 @@ export default function CheckoutModal({
   const removeCompanion = (index) => {
     const newCompanions = companions.filter((_, i) => i !== index);
     setCompanions(newCompanions);
+  };
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    try {
+      const res = await api.post('/coupons/validate', { code: couponCode.trim() });
+      setAppliedCoupon(res.data.coupon);
+      setCouponError('');
+    } catch (err) {
+      setCouponError(err.response?.data?.error || 'Cupón inválido');
+      setAppliedCoupon(null);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
   };
 
   // ===== Validación del Paso 0 (Resumen + Huésped) =====
@@ -368,7 +404,8 @@ export default function CheckoutModal({
         document_number: guestData.document_number.trim(),
         guest_phone: guestData.guest_phone.trim() || undefined,
         notes: guestData.notes.trim() || undefined,
-        companions: companions
+        companions: companions,
+        coupon_code: appliedCoupon ? appliedCoupon.code : null
       };
 
       const result = await createCheckoutIntent(payload);
@@ -538,6 +575,15 @@ export default function CheckoutModal({
                 <span>Impuestos y tasas (IGV):</span>
                 <span>Incluidos</span>
               </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-[#ba1a1a]">
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">local_activity</span>
+                    Descuento ({appliedCoupon.code})
+                  </span>
+                  <span className="font-bold">- S/ {discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="border-t border-[#d1c5af] pt-2 mt-2 flex justify-between items-baseline">
                 <span className="font-serif font-bold text-sm text-[#14213d]">Total a Pagar:</span>
                 <span className="font-mono font-bold text-lg text-[#14213d] bg-[#c9a227]/20 px-2 py-0.5 border border-[#c9a227]">
@@ -545,6 +591,45 @@ export default function CheckoutModal({
                 </span>
               </div>
             </div>
+          </div>
+          
+          {/* Aplicar Cupón */}
+          <div className="bg-[#fcfcfc] border border-[#d1c5af] p-4">
+             <h4 className="font-mono text-xs uppercase font-bold text-[#14213d] tracking-wider mb-2 flex items-center gap-1.5">
+               <span className="material-symbols-outlined text-sm text-[#755b00]">sell</span>
+               Cupón de Descuento
+             </h4>
+             {!appliedCoupon ? (
+               <div>
+                 <div className="flex gap-2">
+                   <input 
+                     type="text" 
+                     placeholder="Ingresa tu código" 
+                     value={couponCode}
+                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                     className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none uppercase"
+                   />
+                   <button 
+                     type="button"
+                     onClick={handleApplyCoupon}
+                     className="bg-[#14213d] hover:bg-[#0a1128] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors"
+                   >
+                     Aplicar
+                   </button>
+                 </div>
+                 {couponError && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{couponError}</p>}
+               </div>
+             ) : (
+               <div className="flex items-center justify-between bg-[#e5efff] border border-[#0047b3] p-2">
+                 <div className="flex items-center gap-2">
+                   <span className="material-symbols-outlined text-[#0047b3] text-sm">check_circle</span>
+                   <span className="font-mono text-xs font-bold text-[#0047b3]">{appliedCoupon.code} aplicado</span>
+                 </div>
+                 <button onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]">
+                   <span className="material-symbols-outlined text-sm">delete</span>
+                 </button>
+               </div>
+             )}
           </div>
 
           {/* Badge de pago seguro */}

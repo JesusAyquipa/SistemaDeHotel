@@ -54,6 +54,9 @@ class BookingController extends Controller
     public function store(StoreBookingRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        
+        // El request custom ya validó, pero si pasamos coupon_code lo atrapamos (o lo validamos aquí si no está en el request)
+        $couponCode = $request->input('coupon_code');
 
         $room = Room::findOrFail($validated['room_id']);
 
@@ -77,11 +80,26 @@ class BookingController extends Controller
             $nights = 1;
         }
 
-        $totalAmount = $room->price_per_night * $nights;
+        $subTotal = $room->price_per_night * $nights;
+        $discountAmount = 0;
+        
+        $coupon = null;
+        if (!empty($couponCode)) {
+            $coupon = \App\Models\Coupon::where('code', $couponCode)->where('is_active', true)->first();
+            if ($coupon && $coupon->expires_at >= now() && (!$coupon->max_uses || $coupon->current_uses < $coupon->max_uses)) {
+                if ($coupon->discount_type === 'percentage') {
+                    $discountAmount = $subTotal * ($coupon->discount_value / 100);
+                } else {
+                    $discountAmount = $coupon->discount_value;
+                }
+            }
+        }
+        
+        $totalAmount = max(0, $subTotal - $discountAmount);
 
         try {
             // Iniciar transacción de base de datos para garantizar consistencia atómica
-            $booking = DB::transaction(function () use ($validated, $room, $totalAmount) {
+            $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $coupon) {
                 // BLOQUEO PESIMISTA:
                 // Bloqueamos la fila de la habitación para prevenir 'race conditions' (Double-booking).
                 Room::where('id', $room->id)->lockForUpdate()->first();
@@ -156,6 +174,10 @@ class BookingController extends Controller
             // La habitación sigue estando 'disponible' en el inventario general, 
             // solo se bloquean las fechas en base a los registros de Booking.
 
+            if ($coupon) {
+                $coupon->increment('current_uses');
+            }
+
             return $newBooking;
         });
         } catch (\Exception $e) {
@@ -211,6 +233,55 @@ class BookingController extends Controller
 
         return response()->json([
             'booking' => $booking
+        ]);
+    }
+
+    /**
+     * Devuelve los cargos de una reserva.
+     * GET /api/bookings/{id}/charges
+     */
+    public function getCharges($id): JsonResponse
+    {
+        $booking = Booking::with('room')->findOrFail($id);
+        $charges = \App\Models\Charge::where('booking_id', $id)->orderBy('date')->get();
+
+        // Include the base room charge as the first charge dynamically if there are no real charges or just return it as part of the list
+        // Let's just return the db charges and let frontend prepend the room charge.
+        
+        return response()->json([
+            'charges' => $charges
+        ]);
+    }
+
+    /**
+     * Añade un cargo a una reserva.
+     * POST /api/bookings/{id}/charges
+     */
+    public function addCharge(Request $request, $id): JsonResponse
+    {
+        $booking = Booking::findOrFail($id);
+        
+        $validated = $request->validate([
+            'date' => 'required|date',
+            'concept' => 'required|string',
+            'quantity' => 'required|integer|min:1',
+            'unit_price' => 'required|numeric|min:0',
+        ]);
+        
+        $total = $validated['quantity'] * $validated['unit_price'];
+
+        $charge = \App\Models\Charge::create([
+            'booking_id' => $booking->id,
+            'date' => $validated['date'],
+            'concept' => $validated['concept'],
+            'quantity' => $validated['quantity'],
+            'unit_price' => $validated['unit_price'],
+            'total' => $total
+        ]);
+
+        return response()->json([
+            'message' => 'Cargo añadido con éxito.',
+            'charge' => $charge
         ]);
     }
 

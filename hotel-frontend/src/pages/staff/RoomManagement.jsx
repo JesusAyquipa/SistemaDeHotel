@@ -82,6 +82,7 @@ export default function RoomManagement() {
     price_per_night: '',
     description: '',
     image_url: '',
+    image_file: null,
     status: 'disponible',
   });
   const [formErrors, setFormErrors] = useState({});
@@ -207,6 +208,7 @@ export default function RoomManagement() {
       price_per_night: '',
       description: '',
       image_url: '',
+      image_file: null,
       status: 'disponible',
     });
     setFormErrors({});
@@ -225,6 +227,7 @@ export default function RoomManagement() {
       price_per_night: room.price_per_night || '',
       description: room.description || '',
       image_url: room.image_url || '',
+      image_file: null,
       status: room.status || 'disponible',
     });
     setFormErrors({});
@@ -238,11 +241,28 @@ export default function RoomManagement() {
     setFormErrors({});
 
     try {
+      // Usar FormData para soportar subida de imágenes
+      const dataToSend = new FormData();
+      dataToSend.append('room_number', formData.room_number);
+      dataToSend.append('name', formData.name);
+      dataToSend.append('bed_type', formData.bed_type);
+      dataToSend.append('capacity', formData.capacity);
+      dataToSend.append('size_m2', formData.size_m2 || '');
+      dataToSend.append('price_per_night', formData.price_per_night);
+      dataToSend.append('description', formData.description || '');
+      dataToSend.append('status', formData.status);
+      
+      if (formData.image_file) {
+        dataToSend.append('image', formData.image_file);
+      } else if (formData.image_url) {
+        dataToSend.append('image_url', formData.image_url);
+      }
+
       if (editingRoom) {
-        await updateRoom(editingRoom.id, formData);
+        await updateRoom(editingRoom.id, dataToSend);
         showNotification(`Habitación ${formData.room_number} actualizada correctamente`);
       } else {
-        await createRoom(formData);
+        await createRoom(dataToSend);
         showNotification(`Habitación ${formData.room_number} creada exitosamente`);
       }
       setIsModalOpen(false);
@@ -670,15 +690,33 @@ export default function RoomManagement() {
 
                 <div className="sm:col-span-2">
                   <label className="block font-bold text-[#4d4635] uppercase mb-1">
-                    URL de la Imagen (Opcional)
+                    Imagen de la Habitación (Opcional)
                   </label>
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/..."
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                    className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono focus:border-[#14213d] focus:outline-none"
-                  />
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setFormData({ ...formData, image_file: e.target.files[0] })}
+                      className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-1.5 text-xs font-mono focus:border-[#14213d] focus:outline-none file:mr-4 file:py-1 file:px-3 file:border-0 file:bg-[#14213d] file:text-[#fbf9f4] file:font-bold file:cursor-pointer hover:file:bg-[#2a385e]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#78716c] uppercase font-bold">O ingresar URL:</span>
+                      <input
+                        type="url"
+                        placeholder="https://images.unsplash.com/..."
+                        value={formData.image_url}
+                        onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                        disabled={!!formData.image_file}
+                        className="flex-1 bg-[#fbf9f4] border border-[#d1c5af] p-1.5 text-xs font-mono focus:border-[#14213d] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+                  {formErrors.image && (
+                    <p className="text-[#ba1a1a] text-[10px] mt-1">{formErrors.image[0]}</p>
+                  )}
+                  {formErrors.image_url && (
+                    <p className="text-[#ba1a1a] text-[10px] mt-1">{formErrors.image_url[0]}</p>
+                  )}
                 </div>
 
                 <div className="sm:col-span-2">

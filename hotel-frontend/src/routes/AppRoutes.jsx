@@ -3,11 +3,14 @@ import PingTest from '../pages/PingTest';
 import RegisterGuest from '../pages/staff/RegisterGuest';
 import StaffManagement from '../pages/staff/StaffManagement';
 import RoomManagement from '../pages/staff/RoomManagement';
+import HousekeepingDashboard from '../pages/staff/HousekeepingDashboard';
+import RoomAccount from '../pages/staff/RoomAccount';
 import RoomsListing from '../pages/RoomsListing';
 import GuestLogin from '../pages/GuestLogin';
 import BookingManagement from '../pages/staff/BookingManagement';
 import ReceptionistBooking from '../pages/staff/ReceptionistBooking';
 import ReportsDashboard from '../pages/staff/ReportsDashboard';
+import SettingsDashboard from '../pages/staff/SettingsDashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
 import MyBookings from '../pages/MyBookings';
 
@@ -53,11 +56,21 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
           <StaffManagement />
         </ProtectedRoute>
       } />
+      <Route path="/configuracion" element={
+        <ProtectedRoute allowedRoles={['admin', 'recepcionista']}>
+          <SettingsDashboard />
+        </ProtectedRoute>
+      } />
 
       {/* ---------------- RUTAS RECEPCIONISTA ---------------- */}
       <Route path="/recepcionista/habitaciones" element={
         <ProtectedRoute allowedRoles={['recepcionista']}>
-          <RoomManagement />
+          <HousekeepingDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/recepcionista/habitaciones/:id/cuenta" element={
+        <ProtectedRoute allowedRoles={['recepcionista']}>
+          <RoomAccount />
         </ProtectedRoute>
       } />
       <Route path="/recepcionista/reservas" element={
