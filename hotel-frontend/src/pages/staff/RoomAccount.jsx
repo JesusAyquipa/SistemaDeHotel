@@ -3,7 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import StaffSidebar from '../../components/StaffSidebar';
 import { getRoomDetails } from '../../services/roomStaffService';
 import AddChargeModal from '../../components/staff/AddChargeModal';
+import ProcessPaymentModal from '../../components/staff/ProcessPaymentModal';
 import Toast from '../../components/Toast';
+import api from '../../services/api';
 
 export default function RoomAccount() {
   const { id } = useParams();
@@ -11,8 +13,10 @@ export default function RoomAccount() {
   const [activeBooking, setActiveBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [charges, setCharges] = useState([]);
+  const [payments, setPayments] = useState([]);
   
   const [isAddChargeOpen, setIsAddChargeOpen] = useState(false);
+  const [isProcessPaymentOpen, setIsProcessPaymentOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
@@ -42,7 +46,9 @@ export default function RoomAccount() {
             try {
               const res = await api.get(`/staff/bookings/${booking.id}/charges`);
               const dbCharges = res.data.charges || [];
+              const dbPayments = res.data.payments || [];
               setCharges([baseCharge, ...dbCharges]);
+              setPayments(dbPayments);
             } catch (err) {
               console.error("Error fetching charges", err);
               // Set base charge even if fetch fails
@@ -85,6 +91,9 @@ export default function RoomAccount() {
   const subtotal = charges.reduce((acc, curr) => acc + parseFloat(curr.total), 0);
   const igv = subtotal * 0.18;
   const total = subtotal + igv;
+  
+  const totalPagado = payments.reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
+  const saldoPendiente = Math.max(0, total - totalPagado);
 
   const handleAddCharge = async (newCharge) => {
     if (!activeBooking) {
@@ -104,8 +113,8 @@ export default function RoomAccount() {
        setCharges(prev => [...prev, res.data.charge]);
        setToastMessage(`Consumo agregado: ${newCharge.concept}`);
     } catch (err) {
-       console.error(err);
-       setToastMessage('Error al agregar el consumo');
+       console.error("ADD CHARGE ERROR:", err, err.response?.data);
+       setToastMessage('Error al agregar el consumo: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -113,21 +122,37 @@ export default function RoomAccount() {
     window.print();
   };
 
-  const handleEmail = () => {
-    if (activeBooking?.guest?.email) {
-      setToastMessage(`Folio enviado a ${activeBooking.guest.email}`);
-    } else {
-      setToastMessage('Folio enviado por correo exitosamente');
+  const handleEmail = async () => {
+    if (!activeBooking) return;
+    
+    setToastMessage('Enviando folio por correo...');
+    try {
+      const res = await api.post(`/staff/bookings/${activeBooking.id}/email-folio`);
+      setToastMessage(res.data.message || 'Folio enviado por correo exitosamente');
+    } catch (err) {
+      console.error("EMAIL ERROR:", err);
+      setToastMessage('Error al enviar el correo: ' + (err.response?.data?.message || err.message));
     }
   };
 
-  const handleProcessPayment = () => {
-    setToastMessage(`Procesando pago por $${total.toFixed(2)}...`);
-    // Simulated delay
-    setTimeout(() => {
-      setToastMessage('¡Pago procesado con éxito!');
-      setCharges([]); // Clear charges on success
-    }, 1500);
+  const handleProcessPayment = async (paymentData) => {
+    if (!activeBooking) return;
+    
+    setToastMessage(`Procesando pago por $${paymentData.amount.toFixed(2)}...`);
+    
+    try {
+      const res = await api.post(`/staff/bookings/${activeBooking.id}/pay`, {
+        amount: paymentData.amount,
+        method: paymentData.method
+      });
+      
+      setPayments(prev => [...prev, res.data.payment]);
+      setToastMessage(`¡Pago de $${paymentData.amount.toFixed(2)} procesado con éxito!`);
+      setIsProcessPaymentOpen(false);
+    } catch (err) {
+      console.error("PAYMENT ERROR:", err, err.response?.data);
+      setToastMessage('Error al procesar pago: ' + (err.response?.data?.message || err.message));
+    }
   };
 
   return (
@@ -258,17 +283,29 @@ export default function RoomAccount() {
               </div>
               
               <div className="flex flex-col pr-6 mb-6">
-                <span className="font-serif text-sm tracking-widest uppercase text-[#2d2d2a] font-bold">Total Acumulado:</span>
-                <span className="font-serif text-3xl font-bold text-[#987d35] mt-1">${total.toFixed(2)}</span>
+                <span className="font-serif text-sm tracking-widest uppercase text-[#2d2d2a] font-bold">Total Cuenta:</span>
+                <span className="font-serif text-2xl font-bold text-[#2d2d2a] mt-1">${total.toFixed(2)}</span>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <span className="font-serif text-sm tracking-widest uppercase text-[#a39f96] font-bold">Total Pagado:</span>
+                  <span className="font-serif text-xl font-bold text-[#7a642a] block mt-1">${totalPagado.toFixed(2)}</span>
+                </div>
+                
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <span className="font-serif text-sm tracking-widest uppercase text-[#2d2d2a] font-bold">Saldo Pendiente:</span>
+                  <span className="font-serif text-3xl font-bold text-[#987d35] block mt-1">${saldoPendiente.toFixed(2)}</span>
+                </div>
               </div>
 
               <button 
-                onClick={handleProcessPayment}
-                disabled={total <= 0}
+                onClick={() => setIsProcessPaymentOpen(true)}
+                disabled={saldoPendiente <= 0}
                 className="w-full disabled:opacity-50 disabled:cursor-not-allowed bg-[#fcede8] hover:bg-[#f5e0d8] border border-[#d32f2f] text-[#d32f2f] font-mono text-xs font-bold uppercase tracking-widest py-3 flex items-center justify-center gap-2 transition-colors"
               >
-                <span className="material-symbols-outlined text-sm">payments</span>
-                Procesar Pago
+                <span className="material-symbols-outlined text-sm">
+                  {saldoPendiente <= 0 ? 'check_circle' : 'payments'}
+                </span>
+                {saldoPendiente <= 0 ? 'CUENTA PAGADA' : 'Procesar Pago'}
               </button>
             </div>
           </div>
@@ -280,6 +317,19 @@ export default function RoomAccount() {
         isOpen={isAddChargeOpen} 
         onClose={() => setIsAddChargeOpen(false)}
         onAddCharge={handleAddCharge}
+      />
+
+      <ProcessPaymentModal
+        isOpen={isProcessPaymentOpen}
+        onClose={() => setIsProcessPaymentOpen(false)}
+        onProcessPayment={handleProcessPayment}
+        totalAmount={saldoPendiente}
+      />
+
+      <Toast 
+        message={toastMessage} 
+        isOpen={!!toastMessage} 
+        onClose={() => setToastMessage(null)} 
       />
     </div>
   );

@@ -16,6 +16,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\BookingConfirmedMail;
 use App\Mail\BookingModifiedMail;
+use App\Mail\FolioMail;
 
 class BookingController extends Controller
 {
@@ -244,12 +245,11 @@ class BookingController extends Controller
     {
         $booking = Booking::with('room')->findOrFail($id);
         $charges = \App\Models\Charge::where('booking_id', $id)->orderBy('date')->get();
+        $payments = \App\Models\Payment::where('booking_id', $id)->orderBy('created_at')->get();
 
-        // Include the base room charge as the first charge dynamically if there are no real charges or just return it as part of the list
-        // Let's just return the db charges and let frontend prepend the room charge.
-        
         return response()->json([
-            'charges' => $charges
+            'charges' => $charges,
+            'payments' => $payments
         ]);
     }
 
@@ -283,6 +283,74 @@ class BookingController extends Controller
             'message' => 'Cargo añadido con éxito.',
             'charge' => $charge
         ]);
+    }
+
+    /**
+     * Procesa un pago para una reserva (cuenta de habitación).
+     * POST /api/bookings/{id}/pay
+     */
+    public function processPayment(Request $request, $id): JsonResponse
+    {
+        $booking = Booking::findOrFail($id);
+        
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'method' => 'required|string|in:Efectivo,Tarjeta,Transferencia'
+        ]);
+        
+        $payment = \App\Models\Payment::create([
+            'booking_id' => $booking->id,
+            'amount' => $validated['amount'],
+            'payment_method' => $validated['method'],
+            'status' => 'completed',
+            'paid_at' => now(),
+            'transaction_id' => 'MANUAL-' . uniqid(),
+            'gateway_provider' => 'manual',
+            'currency' => 'PEN',
+            'receipt_number' => \App\Models\Payment::generateReceiptNumber(),
+        ]);
+
+        return response()->json([
+            'message' => 'Pago procesado con éxito.',
+            'payment' => $payment
+        ]);
+    }
+
+    /**
+     * Envia el folio (estado de cuenta) por correo electrónico.
+     * POST /api/bookings/{id}/email-folio
+     */
+    public function emailFolio(Request $request, $id): JsonResponse
+    {
+        $booking = Booking::with(['guest', 'room'])->findOrFail($id);
+        $charges = \App\Models\Charge::where('booking_id', $id)->orderBy('date')->get();
+        $payments = \App\Models\Payment::where('booking_id', $id)->orderBy('created_at')->get();
+
+        $subtotal = $charges->sum('total') + $booking->total_amount;
+        $igv = $subtotal * 0.18;
+        $total = $subtotal + $igv;
+        $pagado = $payments->sum('amount');
+        $saldo = max(0, $total - $pagado);
+
+        $totals = [
+            'subtotal' => $subtotal,
+            'igv' => $igv,
+            'total' => $total,
+            'pagado' => $pagado,
+            'saldo' => $saldo
+        ];
+
+        try {
+            Mail::to($booking->guest->email)->send(new FolioMail($booking, $charges, $payments, $totals));
+            return response()->json([
+                'message' => 'Folio enviado por correo exitosamente a ' . $booking->guest->email
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('No se pudo enviar el correo del folio: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Hubo un error al intentar enviar el correo. Por favor, revise la configuración de correo.'
+            ], 500);
+        }
     }
 
     /**

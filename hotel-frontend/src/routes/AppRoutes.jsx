@@ -13,12 +13,16 @@ import ReportsDashboard from '../pages/staff/ReportsDashboard';
 import SettingsDashboard from '../pages/staff/SettingsDashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
 import MyBookings from '../pages/MyBookings';
+import ResetPassword from '../pages/ResetPassword';
 
 export default function AppRoutes({ pingStatus, setPingStatus }) {
   return (
     <Routes>
       {/* Login Route Único */}
       <Route path="/login" element={<GuestLogin />} />
+      
+      {/* Password Reset */}
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Catálogo Público de Habitaciones con Disponibilidad para Huéspedes */}
       <Route path="/habitaciones" element={<RoomsListing />} />

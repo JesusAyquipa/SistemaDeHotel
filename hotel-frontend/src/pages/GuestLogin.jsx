@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ForgotPasswordModal from '../components/auth/ForgotPasswordModal';
 
 export default function GuestLogin() {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export default function GuestLogin() {
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -209,7 +211,13 @@ export default function GuestLogin() {
                   <input className="h-4 w-4 text-[#755b00] border-[#d1c5af] rounded-sm focus:ring-[#755b00] bg-[#fbf9f4] mr-2" type="checkbox" />
                   <span className="font-body-sm text-sm text-[#4d4635]">Remember me</span>
                 </label>
-                <a className="font-utility-sm text-xs font-medium text-[#755b00] hover:underline uppercase tracking-wider" href="#">Forgot Password?</a>
+                <button 
+                  type="button" 
+                  onClick={() => setIsForgotPasswordOpen(true)}
+                  className="font-utility-sm text-xs font-medium text-[#755b00] hover:underline uppercase tracking-wider"
+                >
+                  Forgot Password?
+                </button>
               </div>
             )}
             
@@ -228,6 +236,11 @@ export default function GuestLogin() {
           </div>
         </div>
       </div>
+
+      <ForgotPasswordModal 
+        isOpen={isForgotPasswordOpen} 
+        onClose={() => setIsForgotPasswordOpen(false)} 
+      />
     </div>
   );
 }
