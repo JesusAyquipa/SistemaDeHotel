@@ -50,6 +50,8 @@ class PaymentController extends Controller
             'companions.*.surname' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'companions.*.document_type' => 'required_with:companions|string',
             'companions.*.document_number' => 'required_with:companions|string|max:20',
+            'companions.*.email' => 'nullable|email|max:150',
+            'companions.*.phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'coupon_code'     => 'nullable|string',
         ]);
 
@@ -113,7 +115,7 @@ class PaymentController extends Controller
         ]);
 
         // Crear reserva en estado pending_payment dentro de una transacción
-        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent) {
+        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon) {
             // Obtener o registrar huésped
             $guest = Guest::where('document_number', $validated['document_number'])
                 ->orWhere('email', $validated['guest_email'])
@@ -163,7 +165,24 @@ class PaymentController extends Controller
                         'surname'         => $companion['surname'],
                         'document_type'   => $companion['document_type'],
                         'document_number' => $companion['document_number'],
+                        'email'           => $companion['email'] ?? null,
+                        'phone'           => $companion['phone'] ?? null,
                     ]);
+
+                    // Registrar como huésped para futuras búsquedas
+                    if (!empty($companion['document_number'])) {
+                        $guestComp = Guest::where('document_number', $companion['document_number'])->first();
+                        if (!$guestComp) {
+                            Guest::create([
+                                'name'            => $companion['name'],
+                                'surname'         => $companion['surname'],
+                                'document_type'   => $companion['document_type'],
+                                'document_number' => $companion['document_number'],
+                                'email'           => $companion['email'] ?? null,
+                                'phone'           => $companion['phone'] ?? null,
+                            ]);
+                        }
+                    }
                 }
             }
 
@@ -282,11 +301,19 @@ class PaymentController extends Controller
             // No cambiamos el estado base de la habitación
         });
 
-        $booking->load(['guest', 'room', 'latestPayment']);
+        $booking->load(['guest', 'room', 'latestPayment', 'companions']);
 
         // Enviar correo de confirmación de reserva
         try {
             Mail::to($booking->guest->email)->send(new BookingConfirmedMail($booking));
+
+            if ($booking->companions) {
+                foreach ($booking->companions as $companion) {
+                    if (!empty($companion->email)) {
+                        Mail::to($companion->email)->send(new BookingConfirmedMail($booking));
+                    }
+                }
+            }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('No se pudo enviar el correo de confirmación post-pago: ' . $e->getMessage());
         }

@@ -40,6 +40,20 @@ export default function CancelBookingModal({ booking, onClose, onSuccess }) {
           <div className="bg-[#eae8e3] p-4 text-left font-mono text-xs text-[#14213d] mb-6">
             <p><strong>Reembolso Aplicado:</strong> {successData.refund_percentage}%</p>
             <p><strong>Monto a Devolver:</strong> S/ {Number(successData.refund_amount).toFixed(2)}</p>
+            
+            {Number(successData.refund_amount) > 0 && (
+              <div className="mt-3 pt-3 border-t border-[#d1c5af]">
+                {successData.payment_method === 'Efectivo' ? (
+                  <p className="text-[#93000a] font-bold">
+                    Pago original en efectivo. Por favor, acérquese a la recepción del hotel con su documento de identidad para recibir su reembolso.
+                  </p>
+                ) : (
+                  <p className="text-[#1b5e20] font-bold">
+                    El reembolso se está procesando a su tarjeta o método de pago original y puede tardar de 5 a 10 días hábiles.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <p className="font-mono text-xs text-[#755b00]">Redirigiendo...</p>
         </div>

@@ -75,6 +75,26 @@ export default function HousekeepingDashboard() {
     const oldRoom = rooms.find((r) => r.id === roomId);
     if (!oldRoom || oldRoom.status === newStatus) return;
 
+    if ((oldRoom.status === 'ocupada' || oldRoom.status === 'reservada') && newStatus === 'disponible') {
+      alert(`Acción denegada:\n\nLa Habitación ${roomNumber} tiene un huésped actual. Para que vuelva a estar 'Disponible', no debes forzar el estado aquí. Debes ir a Recepción (Check-out) para procesar la salida del huésped correctamente.`);
+      setRooms([...rooms]); // trigger re-render to reset select
+      return;
+    }
+
+    if (newStatus === 'ocupada') {
+      alert(`Acción denegada:\n\nNo puedes marcar la Habitación ${roomNumber} como 'Ocupada' manualmente porque no sabríamos quién está adentro. Para ocuparla, crea una reserva y haz el Check-in. Así el sistema guardará los datos del huésped y su cuenta.`);
+      setRooms([...rooms]);
+      return;
+    }
+
+    if ((oldRoom.status === 'ocupada' || oldRoom.status === 'reservada') && (newStatus === 'limpieza' || newStatus === 'mantenimiento')) {
+      const confirmed = window.confirm(`⚠️ ADVERTENCIA:\n\nLa Habitación ${roomNumber} está actualmente ocupada por un huésped. Si cambias el estado a '${newStatus}', dejará de aparecer como 'Ocupada' en este tablero, aunque la reserva siga activa.\n\n¿Estás seguro de que deseas cambiar su estado físico?`);
+      if (!confirmed) {
+        setRooms([...rooms]);
+        return;
+      }
+    }
+
     // Optimistic UI update
     setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status: newStatus } : r));
 
@@ -202,33 +222,33 @@ export default function HousekeepingDashboard() {
                           </div>
                           
                           {/* Dropdown de Estado o Ver Cuenta */}
-                          <div className="relative flex items-center">
-                            {room.status === 'ocupada' || room.status === 'reservada' ? (
+                          <div className="relative flex items-center gap-3">
+                            {(room.status === 'ocupada' || room.status === 'reservada') && (
                               <Link 
                                 to={`/recepcionista/habitaciones/${room.id}/cuenta`}
                                 className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#c9a227] hover:text-[#987d35] transition-colors"
                               >
                                 Ver Cuenta
                               </Link>
-                            ) : (
-                              <>
-                                <select 
-                                  className="appearance-none bg-transparent text-transparent text-xl font-bold leading-none cursor-pointer focus:outline-none focus:ring-0 text-right w-8 z-10 relative"
-                                  style={{ border: 'none' }}
-                                  value={room.status}
-                                  onChange={(e) => handleStatusChange(room.id, e.target.value, room.room_number)}
-                                  title="Cambiar estado"
-                                >
-                                  <option value="disponible" className="text-[#2d2d2a] text-sm">Disponible</option>
-                                  <option value="ocupada" className="text-[#2d2d2a] text-sm">Ocupada</option>
-                                  <option value="limpieza" className="text-[#2d2d2a] text-sm">En Limpieza</option>
-                                  <option value="mantenimiento" className="text-[#2d2d2a] text-sm">Mantenimiento</option>
-                                </select>
-                                <div className="absolute right-0 top-0 pointer-events-none text-[#a39f96] group-hover:text-[#2d2d2a] font-bold text-xl leading-none z-0">
-                                  ...
-                                </div>
-                              </>
                             )}
+                            <div className="relative flex items-center">
+                              <select 
+                                className="appearance-none bg-transparent text-transparent text-xl font-bold leading-none cursor-pointer focus:outline-none focus:ring-0 text-right w-8 z-10 relative"
+                                style={{ border: 'none' }}
+                                value={room.status}
+                                onChange={(e) => handleStatusChange(room.id, e.target.value, room.room_number)}
+                                title="Cambiar estado"
+                              >
+                                <option value="disponible" className="text-[#2d2d2a] text-sm">Disponible</option>
+                                <option value="ocupada" className="text-[#2d2d2a] text-sm">Ocupada</option>
+                                {room.status === 'reservada' && <option value="reservada" className="text-[#2d2d2a] text-sm">Reservada</option>}
+                                <option value="limpieza" className="text-[#2d2d2a] text-sm">En Limpieza</option>
+                                <option value="mantenimiento" className="text-[#2d2d2a] text-sm">Mantenimiento</option>
+                              </select>
+                              <div className="absolute right-0 top-0 pointer-events-none text-[#a39f96] group-hover:text-[#2d2d2a] font-bold text-xl leading-none z-0">
+                                ...
+                              </div>
+                            </div>
                           </div>
                         </div>
 

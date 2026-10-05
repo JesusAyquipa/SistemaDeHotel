@@ -167,7 +167,24 @@ class BookingController extends Controller
                         'surname'         => $companion['surname'],
                         'document_type'   => $companion['document_type'],
                         'document_number' => $companion['document_number'],
+                        'email'           => $companion['email'] ?? null,
+                        'phone'           => $companion['phone'] ?? null,
                     ]);
+
+                    // Registrar como huésped para futuras búsquedas
+                    if (!empty($companion['document_number'])) {
+                        $guestComp = Guest::where('document_number', $companion['document_number'])->first();
+                        if (!$guestComp) {
+                            Guest::create([
+                                'name'            => $companion['name'],
+                                'surname'         => $companion['surname'],
+                                'document_type'   => $companion['document_type'],
+                                'document_number' => $companion['document_number'],
+                                'email'           => $companion['email'] ?? null,
+                                'phone'           => $companion['phone'] ?? null,
+                            ]);
+                        }
+                    }
                 }
             }
 
@@ -403,10 +420,25 @@ class BookingController extends Controller
             ], 422);
         }
 
-        $validated = $request->validate([
-            'check_in'  => 'required|date|after_or_equal:today',
-            'check_out' => 'required|date|after:check_in',
-            'room_id'   => 'sometimes|exists:rooms,id',
+        $rules = [
+            'check_in'  => ['required', 'date'],
+            'check_out' => ['required', 'date', 'after:check_in'],
+            'room_id'   => ['sometimes', 'exists:rooms,id'],
+        ];
+
+        // Solo exigimos que el check_in no sea en el pasado si están modificando la fecha original
+        if ($request->input('check_in') !== Carbon::parse($booking->check_in)->format('Y-m-d')) {
+            $rules['check_in'][] = 'after_or_equal:today';
+        }
+
+        $validated = $request->validate($rules, [
+            'check_in.required' => 'La fecha de check-in es obligatoria.',
+            'check_in.date' => 'La fecha de check-in debe ser válida.',
+            'check_in.after_or_equal' => 'El nuevo check-in no puede ser anterior a hoy.',
+            'check_out.required' => 'La fecha de check-out es obligatoria.',
+            'check_out.date' => 'La fecha de check-out debe ser válida.',
+            'check_out.after' => 'La fecha de check-out debe ser posterior al check-in.',
+            'room_id.exists' => 'La habitación seleccionada no es válida.',
         ]);
 
         $newRoomId = $validated['room_id'] ?? $booking->room_id;
@@ -523,7 +555,7 @@ class BookingController extends Controller
      */
     public function cancel(string $code): JsonResponse
     {
-        $booking = Booking::where('booking_code', $code)->firstOrFail();
+        $booking = Booking::with(['guest', 'payments'])->where('booking_code', $code)->firstOrFail();
 
         if ($booking->status === 'cancelled') {
             return response()->json([
@@ -550,6 +582,10 @@ class BookingController extends Controller
 
         $refundAmount = ($booking->total_amount * $refundPercentage) / 100;
 
+        // Determinar el método de pago principal de esta reserva
+        $mainPayment = $booking->payments->first();
+        $paymentMethod = $mainPayment ? $mainPayment->payment_method : 'Tarjeta';
+
         DB::transaction(function () use ($booking) {
             $booking->update([
                 'status' => 'cancelled'
@@ -560,10 +596,25 @@ class BookingController extends Controller
             // En un sistema real aquí registraríamos el reembolso en la tabla payments
         });
 
+        // Enviar correo de cancelación y reembolso
+        try {
+            if ($booking->guest && $booking->guest->email) {
+                Mail::to($booking->guest->email)->send(new \App\Mail\BookingCancelledMail(
+                    $booking, 
+                    $refundPercentage, 
+                    $refundAmount, 
+                    $paymentMethod
+                ));
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('No se pudo enviar correo de cancelación: ' . $e->getMessage());
+        }
+
         return response()->json([
             'message'           => 'Reserva cancelada con éxito.',
             'refund_percentage' => $refundPercentage,
             'refund_amount'     => $refundAmount,
+            'payment_method'    => $paymentMethod,
             'booking'           => $booking->fresh()
         ]);
     }

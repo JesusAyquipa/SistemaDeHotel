@@ -12,6 +12,8 @@ class BookingCompanion extends Model
         'surname',
         'document_type',
         'document_number',
+        'email',
+        'phone',
     ];
 
     public function booking()

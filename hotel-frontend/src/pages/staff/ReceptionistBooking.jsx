@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
 import api from '../../services/api';
 
@@ -7,6 +7,29 @@ export default function ReceptionistBooking() {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [bookingsList, setBookingsList] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
+
+  const fetchBookingsList = async () => {
+    setLoadingList(true);
+    try {
+      const response = await api.get('/staff/bookings');
+      // Filtrar reservas que tienen sentido para check-in o check-out
+      const activeBookings = response.data.bookings.filter(b => 
+        ['confirmed', 'confirmada', 'pending_payment', 'checked_in'].includes(b.status)
+      );
+      setBookingsList(activeBookings);
+    } catch (err) {
+      console.error('Error fetching bookings list:', err);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookingsList();
+  }, []);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -26,6 +49,13 @@ export default function ReceptionistBooking() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectFromList = (b) => {
+    setBooking(b);
+    setSearchQuery(b.booking_code);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const isEarlyCheckIn = () => {
@@ -183,6 +213,55 @@ export default function ReceptionistBooking() {
                 </div>
               </div>
             )}
+
+            {/* Lista de Reservas (Atajo) */}
+            <div className="bg-[#F7F6F3] border border-[#D1CEC5] p-6 flex flex-col gap-6 mt-4">
+              <h2 className="font-serif text-xl font-bold text-[#14213D] border-b border-[#D1CEC5] pb-2">Próximos Ingresos / Salidas</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#14213D] text-[#F7F6F3]">
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4">Reserva</th>
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4">Huésped</th>
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4">Doc</th>
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4">Fechas</th>
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4">Estado</th>
+                      <th className="font-mono text-[10px] font-normal uppercase tracking-widest py-3 px-4 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm text-[#14213D]">
+                    {loadingList ? (
+                      <tr><td colSpan="6" className="py-4 text-center font-mono text-xs">Cargando...</td></tr>
+                    ) : bookingsList.length === 0 ? (
+                      <tr><td colSpan="6" className="py-4 text-center font-mono text-xs">No hay reservas activas.</td></tr>
+                    ) : (
+                      bookingsList.map(b => (
+                        <tr key={b.id} className="border-b border-[#D1CEC5]/50 hover:bg-[#14213D]/5 transition-colors cursor-pointer" onClick={() => handleSelectFromList(b)}>
+                          <td className="py-3 px-4 font-mono text-xs font-bold">{b.booking_code}</td>
+                          <td className="py-3 px-4 text-sm">{b.guest?.name} {b.guest?.surname}</td>
+                          <td className="py-3 px-4 text-xs">{b.guest?.document_number}</td>
+                          <td className="py-3 px-4 text-xs font-mono">{b.check_in?.substring(5,10)} al {b.check_out?.substring(5,10)}</td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-block px-2 py-1 text-[10px] font-mono font-bold uppercase rounded ${b.status === 'checked_in' ? 'bg-[#14213D]/10 text-[#14213D]' : 'bg-[#2E7A4A]/20 text-[#2E7A4A]'}`}>
+                              {b.status === 'pending_payment' ? 'Pendiente' : b.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSelectFromList(b); }}
+                              className="text-[#755b00] font-mono text-[10px] uppercase font-bold hover:text-[#c9a227] tracking-wider"
+                            >
+                              Seleccionar
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
           </div>
         </div>
       </div>

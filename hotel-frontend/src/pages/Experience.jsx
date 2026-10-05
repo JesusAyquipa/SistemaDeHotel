@@ -13,7 +13,7 @@ export default function Experience() {
             <img 
               alt="Experiencias Curadas" 
               className="w-full h-full object-cover opacity-60 mix-blend-luminosity" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5nnXnpFdiwA5xqSe3Akg5BOdiu-ZgtlPpin0q46S3dDj3M1ZXmWAmmRHNaGVav95uz8-9jmPiXMHEL0yil6IeF5hB9WwSbD5ieSIC8FW807uQfLqcXJPND6mhblk_98QiydSobmzlWbALMYt8RR2fIaoN7la1qRi1DiNb2X9oP8hl9hejkadGqtLQh1TXCTPc6SFKvaBbWfIDgF5HqdwHNvmt7Rwynn2DdNNqMxpiPFtF5x8I9dwvyA" 
+              src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=2070" 
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-on-secondary-fixed via-transparent to-transparent opacity-80"></div>

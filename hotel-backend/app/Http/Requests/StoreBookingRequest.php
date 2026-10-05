@@ -41,6 +41,8 @@ class StoreBookingRequest extends FormRequest
             'companions.*.surname' => ['required_with:companions', 'string', 'max:255', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'companions.*.document_type' => ['required_with:companions', 'string', 'max:50'],
             'companions.*.document_number' => ['required_with:companions', 'string', 'max:50'],
+            'companions.*.email' => ['nullable', 'email', 'max:255'],
+            'companions.*.phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
         ];
     }
 

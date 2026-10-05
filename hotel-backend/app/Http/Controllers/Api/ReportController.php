@@ -143,9 +143,14 @@ class ReportController extends Controller
                                     ];
                                 });
 
+        $unreconciledRevenue = Payment::where('is_reconciled', false)
+                                ->where('status', 'completed')
+                                ->sum('amount');
+
         return response()->json([
             'occupancy_rate' => $occupancyRate,
             'gross_revenue' => $grossRevenue,
+            'unreconciled_revenue' => $unreconciledRevenue,
             'total_bookings' => $totalBookings,
             'chart_data' => $chartData,
             'transactions' => $transactions,
@@ -166,9 +171,11 @@ class ReportController extends Controller
             'difference' => 'required|numeric'
         ]);
 
-        // In a real application, you would save this to a `CashRegisters` or `Shifts` table.
-        // For this task, we will simulate the successful operation.
-        
+        // Marcar todos los pagos completados no conciliados como conciliados
+        Payment::where('is_reconciled', false)
+               ->where('status', 'completed')
+               ->update(['is_reconciled' => true]);
+
         // Log the register close
         \Log::info('Cierre de caja realizado', [
             'user_id' => $request->user()->id,

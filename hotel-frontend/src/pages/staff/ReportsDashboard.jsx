@@ -310,7 +310,7 @@ export default function ReportsDashboard() {
             // Mostrar alguna notificación de éxito y recargar si se desea
             fetchReports();
           }}
-          expectedAmount={Number(data?.gross_revenue || 0)}
+          expectedAmount={Number(data?.unreconciled_revenue || 0)}
         />
       )}
     </div>
