@@ -1,0 +1,87 @@
+services:
+  # -------------------------------------------------------------
+  # Base de Datos MySQL 8
+  # -------------------------------------------------------------
+  database:
+    image: mysql:8.0
+    container_name: grand_ledger_database
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: hotel_reservas
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - grand-ledger-network
+
+  # -------------------------------------------------------------
+  # Backend API - Laravel 11 & PHP 8.2
+  # -------------------------------------------------------------
+  backend:
+    build:
+      context: ./hotel-backend
+      dockerfile: Dockerfile
+    container_name: grand_ledger_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./hotel-backend:/var/www/html
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_DATABASE: hotel_reservas
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - grand-ledger-network
+
+  # -------------------------------------------------------------
+  # Frontend SPA - React & Vite (Node.js 20)
+  # -------------------------------------------------------------
+  frontend:
+    build:
+      context: ./hotel-frontend
+      dockerfile: Dockerfile
+    container_name: grand_ledger_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./hotel-frontend:/app
+      # Volumen anónimo para preservar node_modules compilados dentro del contenedor
+      - /app/node_modules
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      # Detección confiable de cambios de archivos en caliente (HMR) para Windows
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    depends_on:
+      - backend
+    networks:
+      - grand-ledger-network
+
+# -------------------------------------------------------------
+# Volúmenes y Redes persistentes
+# -------------------------------------------------------------
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  grand-ledger-network:
+    driver: bridge
