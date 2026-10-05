@@ -115,7 +115,7 @@ class PaymentController extends Controller
         ]);
 
         // Crear reserva en estado pending_payment dentro de una transacción
-        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon) {
+        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon, $discountAmount, $subTotal) {
             // Obtener o registrar huésped
             $guest = Guest::where('document_number', $validated['document_number'])
                 ->orWhere('email', $validated['guest_email'])
@@ -195,6 +195,11 @@ class PaymentController extends Controller
                 'transaction_id'   => $paymentIntent['transaction_id'],
                 'gateway_provider' => $paymentIntent['provider'],
                 'currency'         => 'PEN',
+                'payment_details'  => [
+                    'discount_amount' => $discountAmount,
+                    'coupon_code'     => $coupon ? $coupon->code : null,
+                    'sub_total'       => $subTotal
+                ]
             ]);
 
             // Incrementar current_uses del cupón si es válido
@@ -288,12 +293,14 @@ class PaymentController extends Controller
         // Pago exitoso: confirmar reserva y generar comprobante
         $receiptNumber = Payment::generateReceiptNumber();
 
-        DB::transaction(function () use ($booking, $payment, $result, $receiptNumber) {
+        $mergedDetails = array_merge($payment->payment_details ?? [], $result['payment_details'] ?? []);
+
+        DB::transaction(function () use ($booking, $payment, $result, $receiptNumber, $mergedDetails) {
             $payment->update([
                 'status'           => 'completed',
                 'transaction_id'   => $result['transaction_id'],
                 'receipt_number'   => $receiptNumber,
-                'payment_details'  => $result['payment_details'],
+                'payment_details'  => $mergedDetails,
                 'paid_at'          => now(),
             ]);
 

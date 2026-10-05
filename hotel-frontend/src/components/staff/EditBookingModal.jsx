@@ -207,6 +207,12 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
       return;
     }
 
+    const expectedCompanions = (Number(adults) + Number(children)) - 1;
+    if (companions.length !== expectedCompanions) {
+      setError(`Debe registrar la información de todos los huéspedes indicados. Se requieren ${expectedCompanions} acompañante(s) según la ocupación seleccionada.`);
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Crear intención de pago
@@ -292,8 +298,16 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                   <span className="text-[10px] uppercase font-bold text-[#78716c] block">ID Transacción</span>
                   <span className="font-bold text-[#1b1c19] text-[10px] break-all">{paymentResult.payment?.transaction_id || '—'}</span>
                 </div>
+                {paymentResult.payment?.payment_details?.discount_amount > 0 && (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">Descuento ({paymentResult.payment.payment_details.coupon_code})</span>
+                    <span className="font-bold text-[#ba1a1a] text-sm">
+                      - S/ {Number(paymentResult.payment.payment_details.discount_amount).toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Cobrado</span>
+                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Total Cobrado</span>
                   <span className="font-bold text-[#14213d] text-sm">
                     S/ {Number(paymentResult.payment?.amount || 0).toFixed(2)}
                   </span>

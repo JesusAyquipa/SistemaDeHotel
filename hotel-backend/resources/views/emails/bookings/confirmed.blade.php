@@ -29,7 +29,16 @@
                 <p><strong>Check-in:</strong> {{ \Carbon\Carbon::parse($booking->check_in)->format('d/m/Y') }} a partir de las 15:00</p>
                 <p><strong>Check-out:</strong> {{ \Carbon\Carbon::parse($booking->check_out)->format('d/m/Y') }} hasta las 12:00</p>
                 <p><strong>Habitación:</strong> {{ $booking->room->name }} - Hab. {{ $booking->room->room_number }} ({{ $booking->room->bed_type }})</p>
-                <p><strong>Monto Total:</strong> ${{ number_format($booking->total_amount, 2) }}</p>
+                @php
+                    $latestPayment = $booking->payments()->latest()->first();
+                    $details = $latestPayment && is_array($latestPayment->payment_details) ? $latestPayment->payment_details : [];
+                    $discountAmt = $details['discount_amount'] ?? 0;
+                    $couponCode = $details['coupon_code'] ?? '';
+                @endphp
+                @if($discountAmt > 0)
+                    <p><strong>Descuento ({{ $couponCode }}):</strong> <span style="color: #ba1a1a;">-S/ {{ number_format($discountAmt, 2) }}</span></p>
+                @endif
+                <p><strong>Monto Total Pagado:</strong> S/ {{ number_format($booking->total_amount, 2) }}</p>
             </div>
             
             <p>Si tienes alguna consulta adicional o necesitas modificar tu reserva, no dudes en contactarnos mencionando tu código de reserva.</p>

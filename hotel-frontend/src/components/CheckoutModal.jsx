@@ -1079,8 +1079,16 @@ export default function CheckoutModal({
                 <span className="font-bold text-[#1b1c19]">{pd.brand} •••• {pd.last4}</span>
               </div>
             </div>
+            {pd.discount_amount > 0 && (
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[#78716c] block">Descuento ({pd.coupon_code})</span>
+                <span className="font-bold text-[#ba1a1a] text-sm">
+                  - S/ {Number(pd.discount_amount).toFixed(2)}
+                </span>
+              </div>
+            )}
             <div>
-              <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Cobrado</span>
+              <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Total Cobrado</span>
               <span className="font-bold text-[#14213d] text-sm">
                 S/ {Number(paymentResult?.payment?.amount || totalAmount).toFixed(2)}
               </span>
