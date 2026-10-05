@@ -16,6 +16,20 @@
   --color-outline-variant: #d1c5af;
   --color-on-surface-variant: #4d4635;
   --color-on-surface: #1b1c19;
+  
+  --color-surface-dim: #dcdad5;
+  --color-background: #fbf9f4;
+  --color-on-primary: #ffffff;
+  --color-on-secondary-fixed: #0d1b36;
+  --color-surface-container: #f0eee9;
+  --color-surface: #fbf9f4;
+  --color-outline: #7f7663;
+  --color-primary-fixed: #ffe08e;
+
+  --spacing-margin-desktop: 48px;
+  --spacing-margin-mobile: 16px;
+  --spacing-staff-density: 8px;
+  --spacing-guest-density: 24px;
 }
 
 @layer base {

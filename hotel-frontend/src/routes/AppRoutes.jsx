@@ -14,6 +14,8 @@ import SettingsDashboard from '../pages/staff/SettingsDashboard';
 import ProtectedRoute from '../components/ProtectedRoute';
 import MyBookings from '../pages/MyBookings';
 import ResetPassword from '../pages/ResetPassword';
+import Experience from '../pages/Experience';
+import About from '../pages/About';
 
 export default function AppRoutes({ pingStatus, setPingStatus }) {
   return (
@@ -24,8 +26,10 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       {/* Password Reset */}
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* Catálogo Público de Habitaciones con Disponibilidad para Huéspedes */}
+      {/* Public Pages */}
       <Route path="/habitaciones" element={<RoomsListing />} />
+      <Route path="/experience" element={<Experience />} />
+      <Route path="/about" element={<About />} />
 
       {/* Rutas de Perfil del Huésped (Cliente) */}
       <Route path="/cliente/mis-reservas" element={

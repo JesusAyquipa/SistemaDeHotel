@@ -28,18 +28,18 @@ export default function PublicHeader() {
           >
             Habitaciones
           </Link>
-          <a
-            href="#experiencia"
+          <Link
+            to="/experience"
             className="text-[#4d4635] font-mono text-xs uppercase tracking-wider hover:text-[#755b00] transition-colors duration-200"
           >
             Experiencia
-          </a>
-          <a
-            href="#nosotros"
+          </Link>
+          <Link
+            to="/about"
             className="text-[#4d4635] font-mono text-xs uppercase tracking-wider hover:text-[#755b00] transition-colors duration-200"
           >
             Nosotros
-          </a>
+          </Link>
         </nav>
 
         {/* Botones de acción */}
