@@ -633,7 +633,7 @@ export default function CheckoutModal({
           </div>
 
           {/* Badge de pago seguro */}
-          <div className="bg-[#14213d] text-[#fbf9f4] p-3 flex items-center gap-3">
+          <div className="bg-[#14213d] text-[#fbf9f4] p-3 flex items-center gap-3 mt-4">
             <span className="material-symbols-outlined text-[#c9a227] text-xl">lock</span>
             <div>
               <p className="font-mono text-[10px] uppercase font-bold text-[#c9a227] tracking-wider">Pago 100% Seguro</p>

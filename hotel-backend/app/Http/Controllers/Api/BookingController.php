@@ -627,9 +627,11 @@ class BookingController extends Controller
     {
         $booking = Booking::where('booking_code', $code)->firstOrFail();
 
-        if ($booking->status !== 'confirmed' && $booking->status !== 'pending_payment') {
+        if ($booking->status !== 'confirmed') {
             return response()->json([
-                'message' => 'La reserva debe estar confirmada para realizar el check-in.'
+                'message' => $booking->status === 'pending_payment' 
+                    ? 'No se puede realizar el check-in porque el pago está pendiente.' 
+                    : 'La reserva debe estar confirmada para realizar el check-in.'
             ], 422);
         }
 

@@ -47,6 +47,7 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
   const [couponError, setCouponError] = useState('');
 
   // Pasarela de Pagos
+  const [paymentMethod, setPaymentMethod] = useState('card');
   const [cardData, setCardData] = useState({
     cardNumber: '',
     cardExpiry: '',
@@ -183,6 +184,27 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
 
   if (!isOpen) return null;
 
+  // Cálculo de totales
+  const selectedRoom = availableRooms.find(r => r.id.toString() === roomId);
+  let nights = 0;
+  if (checkIn && checkOut) {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    nights = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+  }
+  const pricePerNight = selectedRoom ? parseFloat(selectedRoom.price_per_night) : 0;
+  const subTotal = pricePerNight * nights;
+  
+  let discountAmount = 0;
+  if (appliedCoupon) {
+    if (appliedCoupon.discount_type === 'percentage') {
+      discountAmount = subTotal * (parseFloat(appliedCoupon.discount_value) / 100);
+    } else {
+      discountAmount = parseFloat(appliedCoupon.discount_value);
+    }
+  }
+  const totalAmount = Math.max(0, subTotal - discountAmount);
+
   const handleCardChange = (field, value) => {
     let val = value;
     if (field === 'cardNumber') val = formatCardNumber(val);
@@ -202,9 +224,11 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
       return;
     }
 
-    if (!cardData.cardNumber || !cardData.cardExpiry || !cardData.cardCvc || !cardData.cardHolder) {
-      setError('Por favor complete los datos de la tarjeta en la Pasarela de Pagos.');
-      return;
+    if (paymentMethod === 'card') {
+      if (!cardData.cardNumber || !cardData.cardExpiry || !cardData.cardCvc || !cardData.cardHolder) {
+        setError('Por favor complete los datos de la tarjeta en la Pasarela de Pagos.');
+        return;
+      }
     }
 
     const expectedCompanions = (Number(adults) + Number(children)) - 1;
@@ -228,21 +252,35 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
         guest_phone: guestPhone,
         companions: companions,
         notes: "Reserva creada manualmente desde recepción",
-        coupon_code: appliedCoupon ? appliedCoupon.code : null
+        coupon_code: appliedCoupon ? appliedCoupon.code : null,
+        payment_method: paymentMethod
       });
 
       const bookingCode = intentRes.data.booking_code;
 
-      // 2. Procesar pago en pasarela simulada
-      const paymentRes = await api.post('/payments/process-mock', {
-        booking_code: bookingCode,
-        card_number: cardData.cardNumber.replace(/\s/g, ''),
-        card_expiry: cardData.cardExpiry,
-        card_cvc: cardData.cardCvc,
-        card_holder: cardData.cardHolder.trim()
-      });
+      if (paymentMethod === 'card') {
+        // 2. Procesar pago en pasarela simulada
+        const paymentRes = await api.post('/payments/process-mock', {
+          booking_code: bookingCode,
+          card_number: cardData.cardNumber.replace(/\s/g, ''),
+          card_expiry: cardData.cardExpiry,
+          card_cvc: cardData.cardCvc,
+          card_holder: cardData.cardHolder.trim()
+        });
+        setPaymentResult(paymentRes.data);
+      } else {
+        setPaymentResult({
+          success: true,
+          booking_code: bookingCode,
+          receipt_number: intentRes.data.receipt_number,
+          payment: {
+            transaction_id: paymentMethod === 'cash_later' ? intentRes.data.ticket_code : 'CASH',
+            amount: intentRes.data.booking.total_amount,
+            method: paymentMethod
+          }
+        });
+      }
 
-      setPaymentResult(paymentRes.data);
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error(err);
@@ -271,8 +309,15 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#c9a227]/20 border-2 border-[#c9a227] mb-4">
                 <span className="material-symbols-outlined text-4xl text-[#c9a227]">check_circle</span>
               </div>
-              <h3 className="font-serif text-2xl font-bold text-[#14213d] mb-1">¡Pago Confirmado!</h3>
-              <p className="font-sans text-sm text-[#4d4635]">La reserva manual ha sido creada y cobrada exitosamente.</p>
+              <h3 className="font-serif text-2xl font-bold text-[#14213d] mb-1">
+                {paymentResult.payment?.method === 'cash_later' ? '¡Reserva Registrada!' : '¡Pago Confirmado!'}
+              </h3>
+              <p className="font-sans text-sm text-[#4d4635]">
+                {paymentResult.payment?.method === 'cash_later'
+                  ? 'La reserva manual ha sido creada y está a la espera del pago en recepción.'
+                  : `La reserva manual ha sido creada y cobrada exitosamente ${paymentResult.payment?.method === 'cash' ? 'en efectivo' : 'con tarjeta'}.`
+                }
+              </p>
             </div>
 
             <div className="bg-[#f5f3ee] border-2 border-dashed border-[#c9a227] p-5 text-center">
@@ -295,8 +340,12 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                   <span className="font-bold text-[#1b1c19]">{paymentResult.receipt_number || '—'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">ID Transacción</span>
-                  <span className="font-bold text-[#1b1c19] text-[10px] break-all">{paymentResult.payment?.transaction_id || '—'}</span>
+                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">ID Transacción / Medio</span>
+                  <span className="font-bold text-[#1b1c19] text-[10px] break-all">
+                    {paymentResult.payment?.method === 'cash' 
+                      ? 'EFECTIVO (CAJA)' 
+                      : (paymentResult.payment?.method === 'cash_later' ? paymentResult.payment?.transaction_id : paymentResult.payment?.transaction_id || '—')}
+                  </span>
                 </div>
                 {paymentResult.payment?.payment_details?.discount_amount > 0 && (
                   <div>
@@ -675,27 +724,73 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
           {!booking && (
             <div className="space-y-4">
               <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#755b00]">credit_card</span>
-                5. Pasarela de Pagos
+                <span className="material-symbols-outlined text-[#755b00]">payments</span>
+                5. Método de Pago
               </h3>
-              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1 md:col-span-2">
-                  <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Número de Tarjeta</label>
-                  <input type="text" value={cardData.cardNumber} onChange={(e) => handleCardChange('cardNumber', e.target.value)} maxLength={19} placeholder="4242 4242 4242 4242" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
+
+              {/* Resumen de Cobro */}
+              <div className="bg-[#14213d] text-[#fbf9f4] p-4 font-mono text-sm border border-[#14213d] shadow-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[#d1c5af] text-xs">Subtotal ({nights} noches)</span>
+                  <span>S/ {subTotal.toFixed(2)}</span>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Fecha Exp (MM/YY)</label>
-                  <input type="text" value={cardData.cardExpiry} onChange={(e) => handleCardChange('cardExpiry', e.target.value)} maxLength={5} placeholder="MM/YY" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">CVC</label>
-                  <input type="password" value={cardData.cardCvc} onChange={(e) => handleCardChange('cardCvc', e.target.value)} maxLength={4} placeholder="•••" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
-                </div>
-                <div className="flex flex-col gap-1 md:col-span-2">
-                  <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Titular de la Tarjeta</label>
-                  <input type="text" value={cardData.cardHolder} onChange={(e) => handleCardChange('cardHolder', e.target.value)} placeholder="NOMBRE DEL TITULAR" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm uppercase" />
+                {discountAmount > 0 && (
+                  <div className="flex justify-between items-center mb-1 text-[#e67e22]">
+                    <span className="text-xs">Descuento ({appliedCoupon.code})</span>
+                    <span>- S/ {discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-[#d1c5af]/30 font-bold text-lg">
+                  <span className="text-[#c9a227]">TOTAL A COBRAR</span>
+                  <span className="text-[#c9a227]">S/ {totalAmount.toFixed(2)}</span>
                 </div>
               </div>
+              
+              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 flex flex-col sm:flex-row flex-wrap gap-4">
+                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
+                  <input type="radio" name="payment_method" value="card" checked={paymentMethod === 'card'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
+                  Tarjeta
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
+                  <input type="radio" name="payment_method" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
+                  Efectivo (Caja / Presencial)
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
+                  <input type="radio" name="payment_method" value="cash_later" checked={paymentMethod === 'cash_later'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
+                  Efectivo (Pago Pendiente)
+                </label>
+              </div>
+
+              {paymentMethod === 'card' ? (
+                <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1 md:col-span-2">
+                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Número de Tarjeta</label>
+                    <input type="text" value={cardData.cardNumber} onChange={(e) => handleCardChange('cardNumber', e.target.value)} maxLength={19} placeholder="4242 4242 4242 4242" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Fecha Exp (MM/YY)</label>
+                    <input type="text" value={cardData.cardExpiry} onChange={(e) => handleCardChange('cardExpiry', e.target.value)} maxLength={5} placeholder="MM/YY" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">CVC</label>
+                    <input type="password" value={cardData.cardCvc} onChange={(e) => handleCardChange('cardCvc', e.target.value)} maxLength={4} placeholder="•••" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
+                  </div>
+                  <div className="flex flex-col gap-1 md:col-span-2">
+                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Titular de la Tarjeta</label>
+                    <input type="text" value={cardData.cardHolder} onChange={(e) => handleCardChange('cardHolder', e.target.value)} placeholder="NOMBRE DEL TITULAR" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm uppercase" />
+                  </div>
+                </div>
+              ) : paymentMethod === 'cash' ? (
+                <div className="bg-[#e8f4fd] border border-[#7cb9e8]/50 p-4 flex items-center gap-3 font-mono text-sm text-[#1a5276]">
+                  <span className="material-symbols-outlined text-[#2980b9]">storefront</span>
+                  <p>Al confirmar, la reserva se creará y el pago en efectivo se marcará como Completado en caja inmediatamente.</p>
+                </div>
+              ) : (
+                <div className="bg-[#fff3cd] border border-[#ffeeba] p-4 flex items-center gap-3 font-mono text-sm text-[#856404]">
+                  <span className="material-symbols-outlined text-[#856404]">pending_actions</span>
+                  <p>Se generará un ticket para que el huésped pague en efectivo al llegar (Reserva por Teléfono / WhatsApp). La habitación quedará en estado de Pago Pendiente.</p>
+                </div>
+              )}
             </div>
           )}
 

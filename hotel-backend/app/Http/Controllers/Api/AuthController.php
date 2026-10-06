@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\WelcomeGuestMail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +35,13 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
+
+        if (!$user->is_active) {
+            $request->user()->currentAccessToken()?->delete(); // Por si acaso
+            throw ValidationException::withMessages([
+                'email' => ['Tu cuenta ha sido desactivada. Por favor, contacta al administrador.'],
+            ]);
+        }
 
         // Eliminar tokens anteriores (opcional, para mantener una sola sesión)
         $user->tokens()->delete();
@@ -95,8 +104,14 @@ class AuthController extends Controller
             'email' => $request->email,
             'user_id' => $user->id,
         ]);
-
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        // Enviar correo de bienvenida
+        try {
+            Mail::to($user->email)->send(new WelcomeGuestMail($user));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('No se pudo enviar correo de bienvenida: ' . $e->getMessage());
+        }
 
         return response()->json([
             'access_token' => $token,

@@ -197,8 +197,12 @@ export default function ReceptionistBooking() {
                 <div className="flex gap-4 pt-4 border-t border-[#D1CEC5] mt-2">
                   <button 
                     onClick={handleCheckIn}
-                    disabled={(booking.status !== 'confirmed' && booking.status !== 'pending_payment') || isEarlyCheckIn()}
-                    title={isEarlyCheckIn() ? "No se puede hacer check-in antes de la fecha programada" : ""}
+                    disabled={booking.status !== 'confirmed' || isEarlyCheckIn()}
+                    title={
+                      booking.status === 'pending_payment' 
+                        ? "No se puede hacer check-in sin haber completado el pago primero." 
+                        : (isEarlyCheckIn() ? "No se puede hacer check-in antes de la fecha programada" : "")
+                    }
                     className="flex-1 bg-[#2E7A4A] text-white font-mono text-sm font-medium px-6 py-3 uppercase tracking-widest hover:bg-[#3f9e63] transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[2px_2px_0px_0px_rgba(20,33,61,0.1)] active:translate-y-[1px] active:shadow-none"
                   >
                     Realizar Check-In

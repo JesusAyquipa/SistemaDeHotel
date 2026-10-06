@@ -53,6 +53,7 @@ class PaymentController extends Controller
             'companions.*.email' => 'nullable|email|max:150',
             'companions.*.phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'coupon_code'     => 'nullable|string',
+            'payment_method'  => 'nullable|string|in:card,cash,cash_later',
         ]);
 
         $room = Room::findOrFail($validated['room_id']);
@@ -108,14 +109,19 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        // Crear intención de pago en la pasarela
-        $paymentIntent = $this->paymentGateway->createPaymentIntent($totalAmount, 'PEN', [
-            'room_id'    => $room->id,
-            'guest_email' => $validated['guest_email'],
-        ]);
+        $paymentMethod = $validated['payment_method'] ?? 'card';
 
-        // Crear reserva en estado pending_payment dentro de una transacción
-        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon, $discountAmount, $subTotal) {
+        // Crear intención de pago en la pasarela SOLO si es tarjeta
+        $paymentIntent = null;
+        if ($paymentMethod === 'card') {
+            $paymentIntent = $this->paymentGateway->createPaymentIntent($totalAmount, 'PEN', [
+                'room_id'    => $room->id,
+                'guest_email' => $validated['guest_email'],
+            ]);
+        }
+
+        // Crear reserva en estado pending_payment o confirmed dentro de una transacción
+        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon, $discountAmount, $subTotal, $paymentMethod) {
             // Obtener o registrar huésped
             $guest = Guest::where('document_number', $validated['document_number'])
                 ->orWhere('email', $validated['guest_email'])
@@ -153,7 +159,7 @@ class PaymentController extends Controller
                 'check_in'     => $validated['check_in'],
                 'check_out'    => $validated['check_out'],
                 'total_amount' => $totalAmount,
-                'status'       => 'pending_payment',
+                'status'       => $paymentMethod === 'cash' ? 'confirmed' : 'pending_payment',
             ]);
 
             // Guardar acompañantes si existen
@@ -186,15 +192,20 @@ class PaymentController extends Controller
                 }
             }
 
-            // Registrar pago en estado pending
+            $transactionId = in_array($paymentMethod, ['cash', 'cash_later']) ? 'CASH-'.strtoupper(Str::random(8)) : $paymentIntent['transaction_id'];
+            $gatewayProvider = in_array($paymentMethod, ['cash', 'cash_later']) ? 'manual' : $paymentIntent['provider'];
+            $receiptNumber = $paymentMethod === 'cash' ? Payment::generateReceiptNumber() : null;
+
             Payment::create([
                 'booking_id'       => $newBooking->id,
                 'amount'           => $totalAmount,
-                'payment_method'   => 'card',
-                'status'           => 'pending',
-                'transaction_id'   => $paymentIntent['transaction_id'],
-                'gateway_provider' => $paymentIntent['provider'],
+                'payment_method'   => $paymentMethod,
+                'status'           => $paymentMethod === 'cash' ? 'completed' : 'pending',
+                'transaction_id'   => $transactionId,
+                'gateway_provider' => $gatewayProvider,
                 'currency'         => 'PEN',
+                'receipt_number'   => $receiptNumber,
+                'paid_at'          => $paymentMethod === 'cash' ? now() : null,
                 'payment_details'  => [
                     'discount_amount' => $discountAmount,
                     'coupon_code'     => $coupon ? $coupon->code : null,
@@ -211,6 +222,18 @@ class PaymentController extends Controller
         });
 
         $booking->load(['guest', 'room']);
+
+        if (in_array($paymentMethod, ['cash', 'cash_later'])) {
+            $payment = \App\Models\Payment::where('booking_id', $booking->id)->first();
+            return response()->json([
+                'message'        => $paymentMethod === 'cash' ? 'Reserva creada y pago registrado exitosamente.' : 'Reserva generada. Pago pendiente.',
+                'booking_code'   => $booking->booking_code,
+                'booking'        => $booking,
+                'receipt_number' => $payment->receipt_number,
+                'ticket_code'    => $payment->transaction_id,
+                'method'         => $paymentMethod,
+            ], 201);
+        }
 
         return response()->json([
             'message'        => 'Intención de pago creada. Proceda con el pago seguro.',
