@@ -55,7 +55,7 @@ if ! grep -q "^APP_KEY=base64:" .env 2>/dev/null; then\n\
 fi\n\
 mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache\n\
 chmod -R 777 storage bootstrap/cache\n\
-echo "==> [Backend] Iniciando Laravel en http://0.0.0.0:8000 ..."\n\
+echo "==> [Backend] Iniciando Laravel en el puerto ${PORT:-8000} ..."\n\
 exec "$@"\n' > /usr/local/bin/docker-entrypoint.sh \
     && chmod +x /usr/local/bin/docker-entrypoint.sh
 
@@ -64,4 +64,4 @@ EXPOSE 8000
 
 # Entrypoint y comando por defecto
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+CMD sh -c "php artisan serve --host=0.0.0.0 --port=${PORT:-8000}"
