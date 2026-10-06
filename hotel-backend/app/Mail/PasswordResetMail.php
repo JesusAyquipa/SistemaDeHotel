@@ -28,7 +28,7 @@ class PasswordResetMail extends Mailable
      */
     public function build()
     {
-        return $this->subject('Restablecer contraseña - The Grand Ledger')
+        return $this->subject('Restablecer contraseña - Sheraton Lima Hotel')
                     ->view('emails.auth.password_reset');
     }
 }

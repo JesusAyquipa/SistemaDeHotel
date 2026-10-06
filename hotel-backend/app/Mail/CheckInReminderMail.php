@@ -30,7 +30,7 @@ class CheckInReminderMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Recordatorio de Check-in - The Grand Ledger',
+            subject: 'Recordatorio de Check-in - Sheraton Lima Hotel',
         );
     }
 

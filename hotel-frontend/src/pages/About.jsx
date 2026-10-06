@@ -39,7 +39,7 @@ export default function About() {
               <h2 className="font-display-md text-display-md text-on-surface">UN LEGADO DE MÁS DE UN SIGLO</h2>
               <div className="w-12 h-1 bg-primary"></div>
               <p className="font-body-lg text-body-lg text-on-surface-variant">
-                  Fundado en 1894, The Grand Ledger nació con una visión singular: proporcionar un santuario de permanencia física y elegancia atemporal. En una época de constante cambio, hemos mantenido nuestro compromiso con la meticulosidad de antaño.
+                  Fundado en 1973, Sheraton Lima Hotel nació con una visión singular: proporcionar un santuario de permanencia física y elegancia atemporal. En una época de constante cambio, hemos mantenido nuestro compromiso con la meticulosidad de antaño.
               </p>
               <p className="font-body-md text-body-md text-on-surface-variant">
                   Cada anotación en nuestro registro, cada llave de bronce entregada, cuenta la historia de viajeros que buscaron no solo un lugar donde descansar, sino una experiencia de hospitalidad genuina y discreta. Nuestras paredes resguardan los secretos y las alegrías de más de un siglo de huéspedes ilustres.

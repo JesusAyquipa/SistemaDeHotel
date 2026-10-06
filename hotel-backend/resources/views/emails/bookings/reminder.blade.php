@@ -18,7 +18,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>The Grand Ledger</h1>
+            <h1>Sheraton Lima Hotel</h1>
             <p>Recordatorio de Estadía</p>
         </div>
         <div class="content">
@@ -27,7 +27,7 @@
             </div>
             
             <p>Hola <strong>{{ $booking->guest->name }}</strong>,</p>
-            <p>Te escribimos para recordarte que tu reserva en The Grand Ledger comienza el día de mañana. ¡Ya tenemos todo listo para tu llegada!</p>
+            <p>Te escribimos para recordarte que tu reserva en Sheraton Lima Hotel comienza el día de mañana. ¡Ya tenemos todo listo para tu llegada!</p>
             
             <div class="details-box">
                 <p><strong>Código de Reserva:</strong> {{ $booking->booking_code }}</p>
@@ -40,7 +40,7 @@
             <p>¡Esperamos que tengas un viaje seguro!</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ date('Y') }} The Grand Ledger. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

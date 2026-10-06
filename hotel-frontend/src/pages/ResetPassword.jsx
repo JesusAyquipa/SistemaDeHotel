@@ -60,7 +60,7 @@ export default function ResetPassword() {
         
         <div className="bg-[#1b1c19] text-center py-10 px-8 border-b-[6px] border-[#c9a227] relative">
           <h1 className="font-serif text-3xl font-bold text-white tracking-widest uppercase relative z-10">
-            The Grand Ledger
+            Sheraton Lima Hotel
           </h1>
           <p className="font-mono text-xs text-[#a39f96] mt-3 tracking-[0.2em] uppercase relative z-10">
             Restablecer Contraseña

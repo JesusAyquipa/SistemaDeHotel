@@ -34,7 +34,7 @@ class BookingModifiedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Modificación de Reserva - The Grand Ledger',
+            subject: 'Modificación de Reserva - Sheraton Lima Hotel',
         );
     }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Folio de Cuenta - The Grand Ledger</title>
+    <title>Folio de Cuenta - Sheraton Lima Hotel</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');
         
@@ -143,7 +143,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>The Grand Ledger</h1>
+            <h1>Sheraton Lima Hotel</h1>
             <p>Estado de Cuenta Oficial</p>
         </div>
         
@@ -153,7 +153,7 @@
             </div>
             
             <p style="font-size: 13px; color: #4d4635; margin-bottom: 25px;">
-                Agradecemos su preferencia por elegir The Grand Ledger. A continuación, le presentamos el detalle de su cuenta correspondiente a su reciente estadía con nosotros.
+                Agradecemos su preferencia por elegir Sheraton Lima Hotel. A continuación, le presentamos el detalle de su cuenta correspondiente a su reciente estadía con nosotros.
             </p>
 
             <div class="info-box">
@@ -220,7 +220,7 @@
         </div>
         
         <div class="footer">
-            <p style="margin: 0;">&copy; {{ date('Y') }} THE GRAND LEDGER. TODOS LOS DERECHOS RESERVADOS.</p>
+            <p style="margin: 0;">&copy; {{ date('Y') }} Sheraton Lima Hotel. TODOS LOS DERECHOS RESERVADOS.</p>
             <p style="margin: 5px 0 0 0; font-size: 9px; color: #a39f96;">Este es un documento informativo y no constituye un comprobante fiscal electrónico válido a menos que se indique lo contrario.</p>
         </div>
     </div>

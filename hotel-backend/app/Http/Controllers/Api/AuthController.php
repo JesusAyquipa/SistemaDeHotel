@@ -11,7 +11,6 @@ use App\Mail\WelcomeGuestMail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use App\Models\User;
 use App\Mail\PasswordResetMail;
 

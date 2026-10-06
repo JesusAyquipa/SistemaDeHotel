@@ -30,7 +30,7 @@ class BookingConfirmedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Confirmación de Reserva - The Grand Ledger',
+            subject: 'Confirmación de Reserva - Sheraton Lima Hotel',
         );
     }
 

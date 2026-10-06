@@ -18,7 +18,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>The Grand Ledger</h1>
+            <h1>Sheraton Lima Hotel</h1>
             <p>Actualización de Reserva</p>
         </div>
         <div class="content">
@@ -44,7 +44,7 @@
             <p>¡Buen viaje y nos vemos pronto!</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ date('Y') }} The Grand Ledger. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

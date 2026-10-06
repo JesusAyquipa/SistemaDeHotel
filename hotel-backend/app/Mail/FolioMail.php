@@ -33,7 +33,7 @@ class FolioMail extends Mailable
      */
     public function build()
     {
-        return $this->subject('Folio de Cuenta - The Grand Ledger')
+        return $this->subject('Folio de Cuenta - Sheraton Lima Hotel')
                     ->view('emails.bookings.folio');
     }
 }

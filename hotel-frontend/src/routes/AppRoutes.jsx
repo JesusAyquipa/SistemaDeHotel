@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import PingTest from '../pages/PingTest';
+import Home from '../pages/Home';
 import RegisterGuest from '../pages/staff/RegisterGuest';
 import StaffManagement from '../pages/staff/StaffManagement';
 import RoomManagement from '../pages/staff/RoomManagement';
@@ -96,7 +97,7 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       <Route path="/mis-reservas" element={<Navigate to="/cliente/mis-reservas" replace />} />
 
       {/* Rutas Públicas / Demo */}
-      <Route path="/" element={<Navigate to="/habitaciones" replace />} />
+      <Route path="/" element={<Home />} />
       <Route path="/ping" element={<PingTest setPingStatus={setPingStatus} />} />
     </Routes>
   );

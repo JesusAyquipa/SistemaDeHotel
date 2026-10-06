@@ -59,7 +59,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>The Grand Ledger</h1>
+            <h1>Sheraton Lima Hotel</h1>
             <p>Confirmación de Cancelación</p>
         </div>
         <div class="content">
@@ -88,10 +88,10 @@
             </div>
 
             <p>Esperamos poder recibirlo en otra oportunidad.</p>
-            <p>Atentamente,<br>El equipo de The Grand Ledger</p>
+            <p>Atentamente,<br>El equipo de Sheraton Lima Hotel</p>
         </div>
         <div class="footer">
-            <p>© {{ date('Y') }} The Grand Ledger. Todos los derechos reservados.</p>
+            <p>© {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

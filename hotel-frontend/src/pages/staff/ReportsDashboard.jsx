@@ -36,7 +36,7 @@ export default function ReportsDashboard() {
     const doc = new jsPDF();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
-    doc.text('The Grand Ledger - Reporte de Transacciones', 14, 20);
+    doc.text('Sheraton Lima Hotel - Reporte de Transacciones', 14, 20);
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
@@ -69,7 +69,7 @@ export default function ReportsDashboard() {
     if (!data) return;
     
     const summary = [
-      ['The Grand Ledger - Reporte de Transacciones'],
+      ['Sheraton Lima Hotel - Reporte de Transacciones'],
       [`Rango: ${data.startDate} al ${data.endDate}`],
       [],
       ['Tasa de Ocupación', `${data.occupancy_rate}%`],
