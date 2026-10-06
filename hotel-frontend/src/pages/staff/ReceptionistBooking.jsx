@@ -197,7 +197,7 @@ export default function ReceptionistBooking() {
                 <div className="flex gap-4 pt-4 border-t border-[#D1CEC5] mt-2">
                   <button 
                     onClick={handleCheckIn}
-                    disabled={booking.status !== 'confirmed' || isEarlyCheckIn()}
+                    disabled={!['confirmed', 'confirmada'].includes(booking.status) || isEarlyCheckIn()}
                     title={
                       booking.status === 'pending_payment' 
                         ? "No se puede hacer check-in sin haber completado el pago primero." 

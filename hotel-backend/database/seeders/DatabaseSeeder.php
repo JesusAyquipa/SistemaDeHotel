@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\Guest;
 use App\Models\Room;
 use App\Models\Booking;
+use App\Models\Season;
+use App\Models\Coupon;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 
@@ -75,7 +77,7 @@ class DatabaseSeeder extends Seeder
                     'check_in' => Carbon::now()->addDays(2)->format('Y-m-d'), // Llega en 2 días
                     'check_out' => Carbon::now()->addDays(5)->format('Y-m-d'),
                     'total_amount' => $room1->price_per_night * 3,
-                    'status' => 'confirmada'
+                    'status' => 'confirmed'
                 ]
             );
 
@@ -94,9 +96,37 @@ class DatabaseSeeder extends Seeder
                     'check_in' => Carbon::now()->format('Y-m-d'), // Llegó hoy
                     'check_out' => Carbon::now()->addDays(2)->format('Y-m-d'),
                     'total_amount' => $room2->price_per_night * 2,
-                    'status' => 'confirmada'
+                    'status' => 'confirmed'
                 ]
             );
         }
+
+        // 4. CREACIÓN DE TEMPORADAS DE PRUEBA
+        Season::updateOrCreate(
+            ['name' => 'Verano 2027'],
+            ['start_date' => '2027-01-01', 'end_date' => '2027-03-31', 'rate_adjustment' => 20.00, 'is_active' => true]
+        );
+        Season::updateOrCreate(
+            ['name' => 'Invierno 2027'],
+            ['start_date' => '2027-06-01', 'end_date' => '2027-08-31', 'rate_adjustment' => 15.00, 'is_active' => true]
+        );
+        Season::updateOrCreate(
+            ['name' => 'Navidad 2027'],
+            ['start_date' => '2027-12-15', 'end_date' => '2027-12-31', 'rate_adjustment' => 30.00, 'is_active' => true]
+        );
+
+        // 5. CREACIÓN DE CUPONES DE PRUEBA
+        Coupon::updateOrCreate(
+            ['code' => 'BIENVENIDA20'],
+            ['discount_type' => 'percentage', 'discount_value' => 20.00, 'expires_at' => '2027-12-31', 'max_uses' => 100, 'current_uses' => 0, 'is_active' => true]
+        );
+        Coupon::updateOrCreate(
+            ['code' => 'FIEL50'],
+            ['discount_type' => 'fixed', 'discount_value' => 50.00, 'expires_at' => '2027-12-31', 'max_uses' => 50, 'current_uses' => 0, 'is_active' => true]
+        );
+        Coupon::updateOrCreate(
+            ['code' => 'VERANO15'],
+            ['discount_type' => 'percentage', 'discount_value' => 15.00, 'expires_at' => '2027-03-31', 'max_uses' => 200, 'current_uses' => 0, 'is_active' => true]
+        );
     }
 }

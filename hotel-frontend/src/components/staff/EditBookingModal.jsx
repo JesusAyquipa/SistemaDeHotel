@@ -225,8 +225,47 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
     }
 
     if (paymentMethod === 'card') {
-      if (!cardData.cardNumber || !cardData.cardExpiry || !cardData.cardCvc || !cardData.cardHolder) {
-        setError('Por favor complete los datos de la tarjeta en la Pasarela de Pagos.');
+      const cleanNumber = cardData.cardNumber.replace(/\s/g, '');
+      if (!cleanNumber || cleanNumber.length < 13) {
+        setError('Ingrese un número de tarjeta válido (13-16 dígitos)');
+        return;
+      }
+      if (!cardData.cardExpiry || !/^\d{2}\/\d{2}$/.test(cardData.cardExpiry)) {
+        setError('Ingrese la fecha de expiración (MM/YY)');
+        return;
+      } else {
+        const [mm, yy] = cardData.cardExpiry.split('/');
+        const expMonth = parseInt(mm, 10);
+        const expYear = parseInt(yy, 10) + 2000;
+        const now = new Date();
+        const currYear = now.getFullYear();
+        const currMonth = now.getMonth() + 1;
+
+        if (expMonth < 1 || expMonth > 12) {
+          setError('Mes inválido (01-12)');
+          return;
+        } else if (expYear < currYear || (expYear === currYear && expMonth < currMonth)) {
+          setError('La tarjeta está vencida');
+          return;
+        }
+      }
+      if (!cardData.cardCvc || cardData.cardCvc.length < 3) {
+        setError('Ingrese el código CVC (3-4 dígitos)');
+        return;
+      }
+      
+      const holder = cardData.cardHolder.trim();
+      const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\'\s]+$/;
+      const repeatingRegex = /(.)\1{2,}/;
+      
+      if (!holder) {
+        setError('Nombre del titular es obligatorio');
+        return;
+      } else if (holder.length < 5 || !holder.includes(' ')) {
+        setError('Ingrese nombre y apellido completo en la tarjeta');
+        return;
+      } else if (!nameRegex.test(holder) || repeatingRegex.test(holder)) {
+        setError('Ingrese un nombre válido en la tarjeta');
         return;
       }
     }
