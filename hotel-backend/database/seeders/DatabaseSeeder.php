@@ -25,7 +25,11 @@ class DatabaseSeeder extends Seeder
             CurrentStateSeeder::class,
         ]);
 
-        // 2. CREACIÓN DE CUENTAS ESPECÍFICAS
+        // 2. CREACIÓN DE ROLES Y CUENTAS ESPECÍFICAS
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'recepcionista']);
+        \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'cliente']);
+
         $password = Hash::make('password123'); // Contraseña por defecto: password123
 
         // Cuenta Admin
