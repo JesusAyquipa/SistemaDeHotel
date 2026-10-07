@@ -37,11 +37,12 @@ services:
       - ./hotel-backend:/var/www/html
     environment:
       DB_CONNECTION: mysql
-      DB_HOST: database
-      DB_PORT: 3306
-      DB_DATABASE: hotel_reservas
-      DB_USERNAME: root
-      DB_PASSWORD: root
+      DB_HOST: gateway01.sa-east-1.prod.aws.tidbcloud.com
+      DB_PORT: 4000
+      DB_DATABASE: test
+      DB_USERNAME: 37BfuWGEfKB9o6s.root
+      DB_PASSWORD: 5vec3zXukqVGODQ0
+      MYSQL_ATTR_SSL_CA: /var/www/html/isrgrootx1.pem
       APP_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:5173
     depends_on:
