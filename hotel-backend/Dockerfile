@@ -58,6 +58,8 @@ if ! grep -q "^APP_KEY=base64:" .env 2>/dev/null; then\n\
   echo "==> [Backend] Generando APP_KEY..."\n\
   php artisan key:generate --force\n\
 fi\n\
+echo "==> [Backend] Ejecutando migraciones automáticas..."\n\
+php artisan migrate --force\n\
 mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache\n\
 chmod -R 777 storage bootstrap/cache\n\
 echo "==> [Backend] Iniciando Laravel en el puerto ${PORT:-8000} ..."\n\
