@@ -280,19 +280,41 @@ class BookingController extends Controller
         
         $validated = $request->validate([
             'date' => 'required|date',
-            'concept' => 'required|string',
+            'product_id' => 'nullable|exists:products,id',
+            'concept' => 'required_without:product_id|string',
             'quantity' => 'required|integer|min:1',
-            'unit_price' => 'required|numeric|min:0',
+            'unit_price' => 'required_without:product_id|numeric|min:0',
         ]);
+
+        $product = null;
+        $concept = $validated['concept'] ?? '';
+        $unit_price = $validated['unit_price'] ?? 0;
+
+        if (!empty($validated['product_id'])) {
+            $product = \App\Models\Product::findOrFail($validated['product_id']);
+            
+            if ($product->stock < $validated['quantity']) {
+                return response()->json([
+                    'message' => 'Stock insuficiente para el producto seleccionado. Stock actual: ' . $product->stock
+                ], 422);
+            }
+            
+            $concept = $product->name;
+            $unit_price = $product->price;
+            
+            // Reducir el stock
+            $product->decrement('stock', $validated['quantity']);
+        }
         
-        $total = $validated['quantity'] * $validated['unit_price'];
+        $total = $validated['quantity'] * $unit_price;
 
         $charge = \App\Models\Charge::create([
             'booking_id' => $booking->id,
+            'product_id' => $validated['product_id'] ?? null,
             'date' => $validated['date'],
-            'concept' => $validated['concept'],
+            'concept' => $concept,
             'quantity' => $validated['quantity'],
-            'unit_price' => $validated['unit_price'],
+            'unit_price' => $unit_price,
             'total' => $total
         ]);
 

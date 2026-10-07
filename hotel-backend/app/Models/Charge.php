@@ -11,6 +11,7 @@ class Charge extends Model
 
     protected $fillable = [
         'booking_id',
+        'product_id',
         'date',
         'concept',
         'quantity',
@@ -21,5 +22,10 @@ class Charge extends Model
     public function booking()
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
     }
 }
