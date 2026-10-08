@@ -61,12 +61,42 @@ class DatabaseSeeder extends Seeder
         $arnie->assignRole('admin');
 
         // 2.1 CREACIÓN DE PRODUCTOS INICIALES DEL CATÁLOGO
-        \App\Models\Product::updateOrCreate(['name' => 'Coca Cola 500ml'], ['category' => 'bebidas', 'price' => 6.00, 'stock' => 50, 'is_active' => true]);
-        \App\Models\Product::updateOrCreate(['name' => 'Inka Kola 500ml'], ['category' => 'bebidas', 'price' => 6.00, 'stock' => 40, 'is_active' => true]);
-        \App\Models\Product::updateOrCreate(['name' => 'Papas Lays Clásicas'], ['category' => 'snacks', 'price' => 5.50, 'stock' => 30, 'is_active' => true]);
-        \App\Models\Product::updateOrCreate(['name' => 'Sublime'], ['category' => 'snacks', 'price' => 8.00, 'stock' => 20, 'is_active' => true]);
-        \App\Models\Product::updateOrCreate(['name' => 'Masaje Relajante (60m)'], ['category' => 'servicios_spa', 'price' => 120.00, 'stock' => 999, 'is_active' => true]);
-        \App\Models\Product::updateOrCreate(['name' => 'Planchado de Traje'], ['category' => 'lavanderia', 'price' => 25.00, 'stock' => 999, 'is_active' => true]);
+        $defaultProducts = [
+            // Frigobar / Snacks / Bebidas
+            ['name' => 'Agua Mineral 500ml', 'category' => 'bebidas', 'price' => 5.00, 'stock' => 100],
+            ['name' => 'Coca Cola 500ml', 'category' => 'bebidas', 'price' => 6.00, 'stock' => 50],
+            ['name' => 'Inka Kola 500ml', 'category' => 'bebidas', 'price' => 6.00, 'stock' => 40],
+            ['name' => 'Cerveza Local', 'category' => 'bebidas', 'price' => 12.00, 'stock' => 30],
+            ['name' => 'Papas Lays Clásicas', 'category' => 'snacks', 'price' => 5.50, 'stock' => 30],
+            ['name' => 'Chocolate', 'category' => 'snacks', 'price' => 7.00, 'stock' => 25],
+            ['name' => 'Sublime', 'category' => 'snacks', 'price' => 8.00, 'stock' => 20],
+
+            // Restaurante
+            ['name' => 'Desayuno Buffet', 'category' => 'bebidas', 'price' => 45.00, 'stock' => 999],
+            ['name' => 'Almuerzo Menú', 'category' => 'otros', 'price' => 35.00, 'stock' => 999],
+            ['name' => 'Cena a la Carta', 'category' => 'otros', 'price' => 60.00, 'stock' => 999],
+            ['name' => 'Botella de Vino', 'category' => 'bebidas', 'price' => 85.00, 'stock' => 15],
+            ['name' => 'Café / Té', 'category' => 'bebidas', 'price' => 10.00, 'stock' => 100],
+
+            // Lavandería
+            ['name' => 'Lavado por Pieza', 'category' => 'lavanderia', 'price' => 15.00, 'stock' => 999],
+            ['name' => 'Lavado y Planchado (Traje)', 'category' => 'lavanderia', 'price' => 45.00, 'stock' => 999],
+            ['name' => 'Planchado de Camisa', 'category' => 'lavanderia', 'price' => 10.00, 'stock' => 999],
+
+            // Spa
+            ['name' => 'Masaje Relajante (60m)', 'category' => 'servicios_spa', 'price' => 120.00, 'stock' => 999],
+            ['name' => 'Sesión Sauna', 'category' => 'servicios_spa', 'price' => 50.00, 'stock' => 999],
+            ['name' => 'Facial Hidratante', 'category' => 'servicios_spa', 'price' => 90.00, 'stock' => 999],
+
+            // Otros
+            ['name' => 'Transporte al Aeropuerto', 'category' => 'otros', 'price' => 75.00, 'stock' => 999],
+            ['name' => 'Cama Adicional', 'category' => 'otros', 'price' => 100.00, 'stock' => 10],
+            ['name' => 'Late Check-out', 'category' => 'otros', 'price' => 150.00, 'stock' => 999],
+        ];
+
+        foreach ($defaultProducts as $prod) {
+            \App\Models\Product::updateOrCreate(['name' => $prod['name']], array_merge($prod, ['is_active' => true]));
+        }
 
         // 3. CREACIÓN DE RESERVAS DE PRUEBA
         // Buscamos un par de habitaciones que el CurrentStateSeeder acaba de crear
