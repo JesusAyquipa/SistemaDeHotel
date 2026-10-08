@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Models\Booking;
 use App\Models\Season;
 use App\Models\Coupon;
+use App\Models\Product;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 
@@ -170,5 +171,43 @@ class DatabaseSeeder extends Seeder
             ['code' => 'VERANO15'],
             ['discount_type' => 'percentage', 'discount_value' => 15.00, 'expires_at' => '2027-03-31', 'max_uses' => 200, 'current_uses' => 0, 'is_active' => true]
         );
+
+        // 6. CATÁLOGO DE PRODUCTOS / SERVICIOS EXTRA
+        // Se usa updateOrCreate (por nombre) para que el seeder sea idempotente.
+        $catalog = [
+            // Snacks (Frigobar)
+            ['name' => 'Agua Mineral',            'category' => 'bebidas',       'price' => 5.00,   'stock' => 50,  'is_active' => true],
+            ['name' => 'Coca Cola 500ml',          'category' => 'bebidas',       'price' => 6.00,   'stock' => 50,  'is_active' => true],
+            ['name' => 'Inka Kola 500ml',          'category' => 'bebidas',       'price' => 6.00,   'stock' => 40,  'is_active' => true],
+            ['name' => 'Cerveza Local',            'category' => 'bebidas',       'price' => 12.00,  'stock' => 30,  'is_active' => true],
+            ['name' => 'Botella de Vino',          'category' => 'bebidas',       'price' => 85.00,  'stock' => 20,  'is_active' => true],
+            ['name' => 'Café / Té',               'category' => 'bebidas',       'price' => 10.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Papas Lays',               'category' => 'snacks',        'price' => 5.50,   'stock' => 30,  'is_active' => true],
+            ['name' => 'Sublime',                  'category' => 'snacks',        'price' => 7.00,   'stock' => 10,  'is_active' => true],
+            ['name' => 'Chocolate',                'category' => 'snacks',        'price' => 7.00,   'stock' => 25,  'is_active' => true],
+            // Restaurante
+            ['name' => 'Desayuno Buffet',          'category' => 'otros',         'price' => 45.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Almuerzo Menú',            'category' => 'otros',         'price' => 35.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Cena a la Carta',          'category' => 'otros',         'price' => 60.00,  'stock' => 999, 'is_active' => true],
+            // Lavandería
+            ['name' => 'Lavado por Pieza',         'category' => 'lavanderia',    'price' => 15.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Planchado de Camisa',      'category' => 'lavanderia',    'price' => 10.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Planchado de Traje',       'category' => 'lavanderia',    'price' => 25.00,  'stock' => 999, 'is_active' => true],
+            // Servicios Spa
+            ['name' => 'Masaje Relajante (60m)',   'category' => 'servicios_spa', 'price' => 120.00, 'stock' => 999, 'is_active' => true],
+            ['name' => 'Sesión Sauna',             'category' => 'servicios_spa', 'price' => 50.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Facial Hidratante',        'category' => 'servicios_spa', 'price' => 90.00,  'stock' => 999, 'is_active' => true],
+            // Otros servicios
+            ['name' => 'Transporte al Aeropuerto', 'category' => 'otros',         'price' => 75.00,  'stock' => 999, 'is_active' => true],
+            ['name' => 'Cama Adicional',           'category' => 'otros',         'price' => 100.00, 'stock' => 50,  'is_active' => true],
+            ['name' => 'Late Check-out',           'category' => 'otros',         'price' => 150.00, 'stock' => 999, 'is_active' => true],
+        ];
+
+        foreach ($catalog as $item) {
+            Product::updateOrCreate(
+                ['name' => $item['name']],
+                $item
+            );
+        }
     }
 }

@@ -1,45 +1,47 @@
 import { useState, useEffect } from 'react';
 import { getProducts } from '../../services/productService';
 
+// Mapa de tab-UI → categorías en la BD
+const CATEGORY_MAP = {
+  Frigobar:    ['snacks', 'bebidas'],
+  Restaurante: ['bebidas', 'otros'],
+  Spa:         ['servicios_spa'],
+  Lavandería:  ['lavanderia'],
+  Otros:       ['otros'],
+};
+
+// Fallback local por si la BD no responde
 const DEFAULT_PRODUCTS = {
   Frigobar: [
-    { name: 'Agua Mineral', price: 5.00 },
-    { name: 'Coca Cola', price: 6.00 },
-    { name: 'Cerveza Local', price: 12.00 },
+    { name: 'Agua Mineral',   price: 5.00 },
+    { name: 'Coca Cola',      price: 6.00 },
+    { name: 'Cerveza Local',  price: 12.00 },
     { name: 'Snacks / Papas', price: 8.00 },
-    { name: 'Chocolate', price: 7.00 },
-    { name: 'Sublime', price: 8.00 },
+    { name: 'Chocolate',      price: 7.00 },
+    { name: 'Sublime',        price: 8.00 },
   ],
   Restaurante: [
-    { name: 'Desayuno Buffet', price: 45.00 },
-    { name: 'Almuerzo Menú', price: 35.00 },
-    { name: 'Cena a la Carta', price: 60.00 },
-    { name: 'Botella de Vino', price: 85.00 },
-    { name: 'Café / Té', price: 10.00 },
+    { name: 'Desayuno Buffet',    price: 45.00 },
+    { name: 'Almuerzo Menú',      price: 35.00 },
+    { name: 'Cena a la Carta',    price: 60.00 },
+    { name: 'Botella de Vino',    price: 85.00 },
+    { name: 'Café / Té',          price: 10.00 },
   ],
   Lavandería: [
-    { name: 'Lavado por Pieza', price: 15.00 },
-    { name: 'Lavado y Planchado (Traje)', price: 45.00 },
-    { name: 'Planchado de Camisa', price: 10.00 },
+    { name: 'Lavado por Pieza',              price: 15.00 },
+    { name: 'Lavado y Planchado (Traje)',    price: 45.00 },
+    { name: 'Planchado de Camisa',           price: 10.00 },
   ],
   Spa: [
     { name: 'Masaje Relajante (60 min)', price: 120.00 },
-    { name: 'Sesión Sauna', price: 50.00 },
-    { name: 'Facial Hidratante', price: 90.00 },
+    { name: 'Sesión Sauna',              price: 50.00 },
+    { name: 'Facial Hidratante',         price: 90.00 },
   ],
   Otros: [
     { name: 'Transporte al Aeropuerto', price: 75.00 },
-    { name: 'Cama Adicional', price: 100.00 },
-    { name: 'Late Check-out', price: 150.00 },
-  ]
-};
-
-const CATEGORY_ALLOWED_MAP = {
-  Frigobar: ['snacks', 'bebidas'],
-  Restaurante: ['bebidas', 'otros'],
-  Spa: ['servicios_spa'],
-  Lavandería: ['lavanderia'],
-  Otros: ['otros'],
+    { name: 'Cama Adicional',           price: 100.00 },
+    { name: 'Late Check-out',           price: 150.00 },
+  ],
 };
 
 export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
@@ -49,51 +51,75 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState('');
   const [showProductList, setShowProductList] = useState(false);
+
+  // Todos los productos de la BD, cargados una sola vez al abrir el modal
   const [dbProducts, setDbProducts] = useState([]);
+  const [dbLoaded, setDbLoaded] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      getProducts()
+    if (isOpen && !dbLoaded) {
+      getProducts({ is_active: true })
         .then((data) => {
           if (data && data.length > 0) {
             setDbProducts(data);
           }
+          setDbLoaded(true);
         })
-        .catch((err) => console.warn('Usando catálogo estático:', err));
+        .catch((err) => {
+          console.warn('No se pudo cargar catálogo de BD, usando local:', err);
+          setDbLoaded(true);
+        });
     }
-  }, [isOpen]);
+    // Reset dbLoaded al cerrar para que recargue si hay nuevos productos
+    if (!isOpen) {
+      setDbLoaded(false);
+    }
+  }, [isOpen, dbLoaded]);
 
   if (!isOpen) return null;
 
   const total = quantity * (parseFloat(unitPrice) || 0);
 
-  // Obtener la lista filtrada de productos (BD o fallback local)
-  const getCurrentCategoryProducts = () => {
+  // Filtra productos de la BD según la pestaña activa
+  // Si hay datos de BD → usarlos; si no → usar fallback local
+  const getProductsForCategory = () => {
+    const allowedCats = CATEGORY_MAP[category] || ['otros'];
+
     if (dbProducts.length > 0) {
-      const allowedCats = CATEGORY_ALLOWED_MAP[category] || ['otros'];
-      const filtered = dbProducts.filter((p) => allowedCats.includes(p.category) && p.is_active);
+      const filtered = dbProducts.filter(
+        (p) => allowedCats.includes(p.category) && p.is_active
+      );
+      // Si la BD tiene al menos uno para esta tab → usar BD
       if (filtered.length > 0) {
-        return filtered.map((p) => ({ id: p.id, name: p.name, price: parseFloat(p.price) }));
+        return filtered.map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: parseFloat(p.price),
+        }));
       }
     }
+    // Fallback a la lista estática
     return DEFAULT_PRODUCTS[category] || [];
   };
 
-  const availableProducts = getCurrentCategoryProducts();
+  const availableProducts = getProductsForCategory();
+  const filteredBySearch = availableProducts.filter((p) =>
+    p.name.toLowerCase().includes(product.toLowerCase())
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!product.trim() || !unitPrice) return;
-    
+
     onAddCharge({
       date: new Date().toISOString().split('T')[0],
       product_id: selectedProductId,
       concept: `${category} - ${product}`,
       quantity: parseInt(quantity, 10),
       unitPrice: parseFloat(unitPrice),
-      total: total
+      total,
     });
-    
+
     // Reset
     setCategory('Frigobar');
     setProduct('');
@@ -133,7 +159,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
         <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Categoría</label>
-            <select 
+            <select
               value={category}
               onChange={handleCategoryChange}
               className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none cursor-pointer"
@@ -149,8 +175,8 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
           <div className="flex flex-col gap-1">
             <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Producto / Servicio</label>
             <div className="relative">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={product}
                 onChange={(e) => {
                   setProduct(e.target.value);
@@ -158,26 +184,31 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
                 }}
                 onFocus={() => setShowProductList(true)}
                 onBlur={() => setTimeout(() => setShowProductList(false), 200)}
-                placeholder="Seleccionar o escribir producto..." 
+                placeholder="Seleccionar o escribir producto..."
                 required
                 className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 pr-8 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none"
               />
-              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-sm text-[#78716c] pointer-events-none">search</span>
-              
+              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-sm text-[#78716c] pointer-events-none">
+                search
+              </span>
+
               {showProductList && (
-                <div className="absolute top-full left-0 w-full bg-white border border-[#d1c5af] shadow-lg z-10 max-h-40 overflow-y-auto mt-1">
-                  {availableProducts.filter(p => p.name.toLowerCase().includes(product.toLowerCase())).map((prod, idx) => (
-                    <div 
-                      key={idx}
-                      className="px-3 py-2 hover:bg-[#eae8e3] cursor-pointer text-xs font-mono text-[#1b1c19] flex justify-between"
-                      onClick={() => handleSelectProduct(prod)}
-                    >
-                      <span>{prod.name}</span>
-                      <span className="text-[#987d35]">S/ {prod.price.toFixed(2)}</span>
+                <div className="absolute top-full left-0 w-full bg-white border border-[#d1c5af] shadow-lg z-10 max-h-48 overflow-y-auto mt-1">
+                  {filteredBySearch.length > 0 ? (
+                    filteredBySearch.map((prod, idx) => (
+                      <div
+                        key={prod.id ?? idx}
+                        className="px-3 py-2 hover:bg-[#eae8e3] cursor-pointer text-xs font-mono text-[#1b1c19] flex justify-between"
+                        onClick={() => handleSelectProduct(prod)}
+                      >
+                        <span>{prod.name}</span>
+                        <span className="text-[#987d35]">S/ {prod.price.toFixed(2)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-xs font-mono text-[#78716c] italic">
+                      Puedes escribir un concepto personalizado
                     </div>
-                  ))}
-                  {availableProducts.filter(p => p.name.toLowerCase().includes(product.toLowerCase())).length === 0 && (
-                     <div className="px-3 py-2 text-xs font-mono text-[#78716c] italic">Puedes escribir un concepto personalizado</div>
                   )}
                 </div>
               )}
@@ -187,8 +218,8 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
           <div className="flex gap-4">
             <div className="flex-1 flex flex-col gap-1">
               <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Cantidad</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
@@ -198,8 +229,8 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
             </div>
             <div className="flex-1 flex flex-col gap-1">
               <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Precio Unitario (S/)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 step="0.10"
                 min="0"
                 value={unitPrice}
@@ -220,14 +251,14 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
           {/* Footer / Buttons */}
           <div className="flex justify-between items-center bg-[#f5f3ee] -mx-6 -mb-6 p-4 border-t border-[#d1c5af] mt-auto">
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={onClose}
               className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#78716c] hover:text-[#2d2d2a] px-4 py-2 transition-colors"
             >
               Cancelar
             </button>
-            <button 
+            <button
               type="submit"
               className="bg-[#987d35] hover:bg-[#7a642a] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 transition-colors shadow-sm"
             >
