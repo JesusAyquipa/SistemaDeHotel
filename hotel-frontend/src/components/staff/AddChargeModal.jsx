@@ -8,6 +8,7 @@ const DEFAULT_PRODUCTS = {
     { name: 'Cerveza Local', price: 12.00 },
     { name: 'Snacks / Papas', price: 8.00 },
     { name: 'Chocolate', price: 7.00 },
+    { name: 'Sublime', price: 8.00 },
   ],
   Restaurante: [
     { name: 'Desayuno Buffet', price: 45.00 },
@@ -33,17 +34,18 @@ const DEFAULT_PRODUCTS = {
   ]
 };
 
-const CATEGORY_MAP = {
-  Frigobar: 'snacks',
-  Restaurante: 'bebidas',
-  Spa: 'servicios_spa',
-  Lavandería: 'lavanderia',
-  Otros: 'otros',
+const CATEGORY_ALLOWED_MAP = {
+  Frigobar: ['snacks', 'bebidas'],
+  Restaurante: ['bebidas', 'otros'],
+  Spa: ['servicios_spa'],
+  Lavandería: ['lavanderia'],
+  Otros: ['otros'],
 };
 
 export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   const [category, setCategory] = useState('Frigobar');
   const [product, setProduct] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState('');
   const [showProductList, setShowProductList] = useState(false);
@@ -68,10 +70,10 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   // Obtener la lista filtrada de productos (BD o fallback local)
   const getCurrentCategoryProducts = () => {
     if (dbProducts.length > 0) {
-      const dbCat = CATEGORY_MAP[category] || 'otros';
-      const filtered = dbProducts.filter((p) => p.category === dbCat && p.is_active);
+      const allowedCats = CATEGORY_ALLOWED_MAP[category] || ['otros'];
+      const filtered = dbProducts.filter((p) => allowedCats.includes(p.category) && p.is_active);
       if (filtered.length > 0) {
-        return filtered.map((p) => ({ name: p.name, price: parseFloat(p.price) }));
+        return filtered.map((p) => ({ id: p.id, name: p.name, price: parseFloat(p.price) }));
       }
     }
     return DEFAULT_PRODUCTS[category] || [];
@@ -85,6 +87,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
     
     onAddCharge({
       date: new Date().toISOString().split('T')[0],
+      product_id: selectedProductId,
       concept: `${category} - ${product}`,
       quantity: parseInt(quantity, 10),
       unitPrice: parseFloat(unitPrice),
@@ -94,6 +97,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
     // Reset
     setCategory('Frigobar');
     setProduct('');
+    setSelectedProductId(null);
     setQuantity(1);
     setUnitPrice('');
     setShowProductList(false);
@@ -103,11 +107,13 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   const handleCategoryChange = (e) => {
     setCategory(e.target.value);
     setProduct('');
+    setSelectedProductId(null);
     setUnitPrice('');
   };
 
   const handleSelectProduct = (prod) => {
     setProduct(prod.name);
+    setSelectedProductId(prod.id || null);
     setUnitPrice(prod.price);
     setShowProductList(false);
   };
@@ -146,7 +152,10 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
               <input 
                 type="text" 
                 value={product}
-                onChange={(e) => setProduct(e.target.value)}
+                onChange={(e) => {
+                  setProduct(e.target.value);
+                  setSelectedProductId(null);
+                }}
                 onFocus={() => setShowProductList(true)}
                 onBlur={() => setTimeout(() => setShowProductList(false), 200)}
                 placeholder="Seleccionar o escribir producto..." 
