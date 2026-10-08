@@ -53,12 +53,20 @@ class DatabaseSeeder extends Seeder
         );
         $jesus->assignRole('cliente');
 
-        // Cuenta de Arnie
+        // Cuenta de Arnie (Admin)
         $arnie = User::updateOrCreate(
             ['email' => 'arnie.7u7@gmail.com'],
             ['name' => 'Arnie', 'password' => Hash::make('Jesusayquipa1+2'), 'is_active' => true]
         );
-        $arnie->assignRole('cliente');
+        $arnie->assignRole('admin');
+
+        // 2.1 CREACIÓN DE PRODUCTOS INICIALES DEL CATÁLOGO
+        \App\Models\Product::updateOrCreate(['name' => 'Coca Cola 500ml'], ['category' => 'bebidas', 'price' => 6.00, 'stock' => 50, 'is_active' => true]);
+        \App\Models\Product::updateOrCreate(['name' => 'Inka Kola 500ml'], ['category' => 'bebidas', 'price' => 6.00, 'stock' => 40, 'is_active' => true]);
+        \App\Models\Product::updateOrCreate(['name' => 'Papas Lays Clásicas'], ['category' => 'snacks', 'price' => 5.50, 'stock' => 30, 'is_active' => true]);
+        \App\Models\Product::updateOrCreate(['name' => 'Sublime'], ['category' => 'snacks', 'price' => 8.00, 'stock' => 20, 'is_active' => true]);
+        \App\Models\Product::updateOrCreate(['name' => 'Masaje Relajante (60m)'], ['category' => 'servicios_spa', 'price' => 120.00, 'stock' => 999, 'is_active' => true]);
+        \App\Models\Product::updateOrCreate(['name' => 'Planchado de Traje'], ['category' => 'lavanderia', 'price' => 25.00, 'stock' => 999, 'is_active' => true]);
 
         // 3. CREACIÓN DE RESERVAS DE PRUEBA
         // Buscamos un par de habitaciones que el CurrentStateSeeder acaba de crear
