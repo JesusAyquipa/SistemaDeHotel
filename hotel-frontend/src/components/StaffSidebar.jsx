@@ -113,6 +113,21 @@ export default function StaffSidebar() {
           {isAdmin && (
             <li>
               <Link
+                to={`${basePath}/productos`}
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/productos')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">inventory_2</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Productos</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
                 to={`${basePath}/reportes`}
                 onClick={() => setMobileOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/reportes')

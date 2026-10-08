@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ProductController;
 
 // Rutas de Cuentas de Personal y Gestión de Inventario
 Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
@@ -28,6 +29,13 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
     // Gestión de Reportes y Caja
     Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
     Route::post('/reports/close-register', [ReportController::class, 'closeRegister']);
+
+    // Catálogo de Productos y Servicios Extra (Admin / Staff)
+    Route::get('/products', [ProductController::class, 'index'])->middleware('role:admin|recepcionista');
+    Route::post('/products', [ProductController::class, 'store'])->middleware('role:admin|recepcionista');
+    Route::get('/products/{id}', [ProductController::class, 'show'])->middleware('role:admin|recepcionista');
+    Route::put('/products/{id}', [ProductController::class, 'update'])->middleware('role:admin|recepcionista');
+    Route::delete('/products/{id}', [ProductController::class, 'destroy'])->middleware('role:admin|recepcionista');
 
     // Gestión de Cuentas de Personal
     Route::get('/', [StaffController::class, 'index']);

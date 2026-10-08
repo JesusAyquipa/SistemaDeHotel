@@ -1,0 +1,222 @@
+erDiagram
+  bookings {
+    bigint id
+    varchar booking_code
+    bigint guest_id
+    bigint room_id
+    date check_in
+    date check_out
+    decimal total_amount
+    varchar status
+    text early_checkout_reason
+    timestamp created_at
+    timestamp updated_at
+  }
+  booking_companions {
+    bigint id
+    bigint booking_id
+    varchar name
+    varchar surname
+    varchar document_type
+    varchar document_number
+    timestamp created_at
+    timestamp updated_at
+  }
+  cache {
+    varchar key
+    mediumtext value
+    int expiration
+  }
+  cache_locks {
+    varchar key
+    varchar owner
+    int expiration
+  }
+  charges {
+    bigint id
+    bigint booking_id
+    date date
+    varchar concept
+    int quantity
+    decimal unit_price
+    decimal total
+    timestamp created_at
+    timestamp updated_at
+  }
+  coupons {
+    bigint id
+    varchar code
+    enum discount_type
+    decimal discount_value
+    date expires_at
+    int max_uses
+    int current_uses
+    tinyint is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+  failed_jobs {
+    bigint id
+    varchar uuid
+    text connection
+    text queue
+    longtext payload
+    longtext exception
+    timestamp failed_at
+  }
+  guests {
+    bigint id
+    varchar name
+    varchar surname
+    varchar document_type
+    varchar document_number
+    date birth_date
+    varchar nationality
+    varchar phone
+    varchar email
+    varchar address
+    text notes
+    bigint user_id
+    timestamp created_at
+    timestamp updated_at
+  }
+  jobs {
+    bigint id
+    varchar queue
+    longtext payload
+    tinyint attempts
+    int reserved_at
+    int available_at
+    int created_at
+  }
+  job_batches {
+    varchar id
+    varchar name
+    int total_jobs
+    int pending_jobs
+    int failed_jobs
+    longtext failed_job_ids
+    mediumtext options
+    int cancelled_at
+    int created_at
+    int finished_at
+  }
+  migrations {
+    int id
+    varchar migration
+    int batch
+  }
+  model_has_permissions {
+    bigint permission_id
+    varchar model_type
+    bigint model_id
+  }
+  model_has_roles {
+    bigint role_id
+    varchar model_type
+    bigint model_id
+  }
+  password_reset_tokens {
+    varchar email
+    varchar token
+    timestamp created_at
+  }
+  payments {
+    bigint id
+    bigint booking_id
+    decimal amount
+    varchar payment_method
+    varchar status
+    varchar transaction_id
+    varchar gateway_provider
+    varchar currency
+    varchar receipt_number
+    longtext payment_details
+    timestamp paid_at
+    timestamp created_at
+    timestamp updated_at
+  }
+  permissions {
+    bigint id
+    varchar name
+    varchar guard_name
+    timestamp created_at
+    timestamp updated_at
+  }
+  personal_access_tokens {
+    bigint id
+    varchar tokenable_type
+    bigint tokenable_id
+    text name
+    varchar token
+    text abilities
+    timestamp last_used_at
+    timestamp expires_at
+    timestamp created_at
+    timestamp updated_at
+  }
+  roles {
+    bigint id
+    varchar name
+    varchar guard_name
+    timestamp created_at
+    timestamp updated_at
+  }
+  role_has_permissions {
+    bigint permission_id
+    bigint role_id
+  }
+  rooms {
+    bigint id
+    varchar room_number
+    varchar name
+    text description
+    varchar bed_type
+    int capacity
+    int size_m2
+    decimal price_per_night
+    varchar image_url
+    varchar status
+    timestamp created_at
+    timestamp updated_at
+  }
+  seasons {
+    bigint id
+    varchar name
+    date start_date
+    date end_date
+    decimal rate_adjustment
+    tinyint is_active
+    timestamp created_at
+    timestamp updated_at
+  }
+  sessions {
+    varchar id
+    bigint user_id
+    varchar ip_address
+    text user_agent
+    longtext payload
+    int last_activity
+  }
+  users {
+    bigint id
+    varchar name
+    varchar email
+    varchar image_url
+    timestamp email_verified_at
+    varchar password
+    tinyint is_active
+    varchar remember_token
+    timestamp created_at
+    timestamp updated_at
+  }
+  guests ||--o{ bookings : "has"
+  rooms ||--o{ bookings : "has"
+  bookings ||--o{ booking_companions : "has"
+  bookings ||--o{ charges : "has"
+  users ||--o{ guests : "has"
+  permissions ||--o{ model_has_permissions : "has"
+  roles ||--o{ model_has_roles : "has"
+  bookings ||--o{ payments : "has"
+  permissions ||--o{ role_has_permissions : "has"
+  roles ||--o{ role_has_permissions : "has"

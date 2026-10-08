@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getProducts } from '../../services/productService';
 
-const PRODUCTS = {
+const DEFAULT_PRODUCTS = {
   Frigobar: [
     { name: 'Agua Mineral', price: 5.00 },
     { name: 'Coca Cola', price: 6.00 },
@@ -32,16 +33,51 @@ const PRODUCTS = {
   ]
 };
 
+const CATEGORY_MAP = {
+  Frigobar: 'snacks',
+  Restaurante: 'bebidas',
+  Spa: 'servicios_spa',
+  Lavandería: 'lavanderia',
+  Otros: 'otros',
+};
+
 export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   const [category, setCategory] = useState('Frigobar');
   const [product, setProduct] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState('');
   const [showProductList, setShowProductList] = useState(false);
+  const [dbProducts, setDbProducts] = useState([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      getProducts()
+        .then((data) => {
+          if (data && data.length > 0) {
+            setDbProducts(data);
+          }
+        })
+        .catch((err) => console.warn('Usando catálogo estático:', err));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const total = quantity * (parseFloat(unitPrice) || 0);
+
+  // Obtener la lista filtrada de productos (BD o fallback local)
+  const getCurrentCategoryProducts = () => {
+    if (dbProducts.length > 0) {
+      const dbCat = CATEGORY_MAP[category] || 'otros';
+      const filtered = dbProducts.filter((p) => p.category === dbCat && p.is_active);
+      if (filtered.length > 0) {
+        return filtered.map((p) => ({ name: p.name, price: parseFloat(p.price) }));
+      }
+    }
+    return DEFAULT_PRODUCTS[category] || [];
+  };
+
+  const availableProducts = getCurrentCategoryProducts();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -119,20 +155,20 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
               />
               <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-sm text-[#78716c] pointer-events-none">search</span>
               
-              {showProductList && PRODUCTS[category] && (
+              {showProductList && (
                 <div className="absolute top-full left-0 w-full bg-white border border-[#d1c5af] shadow-lg z-10 max-h-40 overflow-y-auto mt-1">
-                  {PRODUCTS[category].filter(p => p.name.toLowerCase().includes(product.toLowerCase())).map((prod, idx) => (
+                  {availableProducts.filter(p => p.name.toLowerCase().includes(product.toLowerCase())).map((prod, idx) => (
                     <div 
                       key={idx}
                       className="px-3 py-2 hover:bg-[#eae8e3] cursor-pointer text-xs font-mono text-[#1b1c19] flex justify-between"
                       onClick={() => handleSelectProduct(prod)}
                     >
                       <span>{prod.name}</span>
-                      <span className="text-[#987d35]">${prod.price.toFixed(2)}</span>
+                      <span className="text-[#987d35]">S/ {prod.price.toFixed(2)}</span>
                     </div>
                   ))}
-                  {PRODUCTS[category].filter(p => p.name.toLowerCase().includes(product.toLowerCase())).length === 0 && (
-                     <div className="px-3 py-2 text-xs font-mono text-[#78716c] italic">No hay coincidencias predefinidas</div>
+                  {availableProducts.filter(p => p.name.toLowerCase().includes(product.toLowerCase())).length === 0 && (
+                     <div className="px-3 py-2 text-xs font-mono text-[#78716c] italic">Puedes escribir un concepto personalizado</div>
                   )}
                 </div>
               )}
@@ -152,14 +188,14 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
               />
             </div>
             <div className="flex-1 flex flex-col gap-1">
-              <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Precio Unitario</label>
+              <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Precio Unitario (S/)</label>
               <input 
                 type="number" 
-                step="0.01"
+                step="0.10"
                 min="0"
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}
-                placeholder="$0.00"
+                placeholder="0.00"
                 required
                 className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none"
               />
@@ -170,7 +206,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
           <div className="flex justify-between items-end mb-4">
             <span className="font-serif text-sm font-bold text-[#2d2d2a]">Total a Cargar:</span>
-            <span className="font-serif text-2xl font-bold text-[#987d35]">${total.toFixed(2)}</span>
+            <span className="font-serif text-2xl font-bold text-[#987d35]">S/ {total.toFixed(2)}</span>
           </div>
 
           {/* Footer / Buttons */}

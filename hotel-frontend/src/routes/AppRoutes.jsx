@@ -17,6 +17,7 @@ import MyBookings from '../pages/MyBookings';
 import ResetPassword from '../pages/ResetPassword';
 import Experience from '../pages/Experience';
 import About from '../pages/About';
+import ProductCatalog from '../pages/admin/ProductCatalog';
 
 export default function AppRoutes({ pingStatus, setPingStatus }) {
   return (
@@ -48,6 +49,11 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       <Route path="/admin/reservas" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <BookingManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/productos" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <ProductCatalog />
         </ProtectedRoute>
       } />
       <Route path="/admin/reportes" element={

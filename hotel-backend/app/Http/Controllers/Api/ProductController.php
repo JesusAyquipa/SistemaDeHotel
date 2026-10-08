@@ -1,0 +1,112 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use App\Models\Product;
+
+class ProductController extends Controller
+{
+    /**
+     * Lista todos los productos del catálogo, con filtros opcionales.
+     * GET /api/staff/products
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $query = Product::query();
+
+        if ($request->filled('category') && $request->query('category') !== 'todos') {
+            $query->where('category', $request->query('category'));
+        }
+
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->query('search') . '%');
+        }
+
+        if ($request->has('is_active')) {
+            $query->where('is_active', filter_var($request->query('is_active'), FILTER_VALIDATE_BOOLEAN));
+        }
+
+        $products = $query->orderBy('category')->orderBy('name')->get();
+
+        return response()->json(['products' => $products]);
+    }
+
+    /**
+     * Crea un nuevo producto en el catálogo.
+     * POST /api/staff/products
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name'      => 'required|string|max:255',
+            'category'  => 'required|in:snacks,bebidas,servicios_spa,lavanderia,otros',
+            'price'     => 'required|numeric|min:0',
+            'stock'     => 'integer|min:0',
+            'is_active' => 'boolean',
+        ], [
+            'name.required'     => 'El nombre del producto es obligatorio.',
+            'category.required' => 'La categoría es obligatoria.',
+            'category.in'       => 'Categoría inválida.',
+            'price.required'    => 'El precio es obligatorio.',
+            'price.numeric'     => 'El precio debe ser un número.',
+        ]);
+
+        $product = Product::create($validated);
+
+        return response()->json([
+            'message' => 'Producto creado correctamente.',
+            'product' => $product,
+        ], 201);
+    }
+
+    /**
+     * Muestra el detalle de un producto.
+     * GET /api/staff/products/{id}
+     */
+    public function show(int $id): JsonResponse
+    {
+        $product = Product::findOrFail($id);
+        return response()->json(['product' => $product]);
+    }
+
+    /**
+     * Actualiza un producto del catálogo.
+     * PUT /api/staff/products/{id}
+     */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $product = Product::findOrFail($id);
+
+        $validated = $request->validate([
+            'name'      => 'sometimes|string|max:255',
+            'category'  => 'sometimes|in:snacks,bebidas,servicios_spa,lavanderia,otros',
+            'price'     => 'sometimes|numeric|min:0',
+            'stock'     => 'sometimes|integer|min:0',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        $product->update($validated);
+
+        return response()->json([
+            'message' => 'Producto actualizado correctamente.',
+            'product' => $product->fresh(),
+        ]);
+    }
+
+    /**
+     * Elimina un producto del catálogo.
+     * DELETE /api/staff/products/{id}
+     */
+    public function destroy(int $id): JsonResponse
+    {
+        $product = Product::findOrFail($id);
+        $product->delete();
+
+        return response()->json([
+            'message' => 'Producto eliminado del catálogo correctamente.',
+        ]);
+    }
+}

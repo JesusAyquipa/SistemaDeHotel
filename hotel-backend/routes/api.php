@@ -37,7 +37,8 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::post('/coupons/validate', [SettingsController::class, 'validateCoupon']);
 
 // Catálogo de Productos
-Route::apiResource('/products', \App\Http\Controllers\ProductController::class);
+Route::apiResource('/products', \App\Http\Controllers\Api\ProductController::class)
+    ->middleware(['auth:sanctum', 'role:admin']);
 
 // Endpoint de prueba de arquitectura /api/ping
 Route::get('/ping', [PingController::class, 'ping']);
