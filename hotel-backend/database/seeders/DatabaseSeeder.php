@@ -132,5 +132,33 @@ class DatabaseSeeder extends Seeder
             ['code' => 'VERANO15'],
             ['discount_type' => 'percentage', 'discount_value' => 15.00, 'expires_at' => '2027-03-31', 'max_uses' => 200, 'current_uses' => 0, 'is_active' => true]
         );
+
+        // 6. CATÁLOGO DE PRODUCTOS Y SERVICIOS EXTRA (SHE-013)
+        $products = [
+            // Bebidas
+            ['name' => 'Agua Mineral con Gas 500ml', 'category' => 'bebidas', 'price' => 5.00, 'stock' => 50, 'is_active' => true],
+            ['name' => 'Coca Cola 350ml', 'category' => 'bebidas', 'price' => 6.00, 'stock' => 40, 'is_active' => true],
+            ['name' => 'Cerveza Artesanal Cusqueña', 'category' => 'bebidas', 'price' => 12.00, 'stock' => 30, 'is_active' => true],
+            ['name' => 'Botella de Vino Tinto Reserva', 'category' => 'bebidas', 'price' => 85.00, 'stock' => 15, 'is_active' => true],
+            // Snacks
+            ['name' => 'Papas Nativas Artesanales', 'category' => 'snacks', 'price' => 8.00, 'stock' => 35, 'is_active' => true],
+            ['name' => 'Chocolate Suizo Premium', 'category' => 'snacks', 'price' => 7.00, 'stock' => 25, 'is_active' => true],
+            ['name' => 'Mix de Frutos Secos Seleccionados', 'category' => 'snacks', 'price' => 10.00, 'stock' => 20, 'is_active' => true],
+            // Servicios Spa
+            ['name' => 'Masaje Relajante Aromaterapia (60 min)', 'category' => 'servicios_spa', 'price' => 120.00, 'stock' => 999, 'is_active' => true],
+            ['name' => 'Sesión Sauna Seco & Vapor', 'category' => 'servicios_spa', 'price' => 50.00, 'stock' => 999, 'is_active' => true],
+            ['name' => 'Tratamiento Facial Hidratante', 'category' => 'servicios_spa', 'price' => 90.00, 'stock' => 999, 'is_active' => true],
+            // Otros
+            ['name' => 'Servicio de Lavandería Express', 'category' => 'otros', 'price' => 25.00, 'stock' => 999, 'is_active' => true],
+            ['name' => 'Transporte Aeropuerto (Ida)', 'category' => 'otros', 'price' => 75.00, 'stock' => 999, 'is_active' => true],
+            ['name' => 'Cama Adicional Plegable', 'category' => 'otros', 'price' => 100.00, 'stock' => 5, 'is_active' => true],
+        ];
+
+        foreach ($products as $prod) {
+            \App\Models\Product::updateOrCreate(
+                ['name' => $prod['name']],
+                $prod
+            );
+        }
     }
 }

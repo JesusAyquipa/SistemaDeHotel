@@ -105,6 +105,7 @@ export default function RoomAccount() {
        // Send to backend
        const res = await api.post(`/staff/bookings/${activeBooking.id}/charges`, {
          date: newCharge.date,
+         product_id: newCharge.product_id || null,
          concept: newCharge.concept,
          quantity: newCharge.quantity,
          unit_price: newCharge.unitPrice

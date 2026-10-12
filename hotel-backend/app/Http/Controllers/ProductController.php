@@ -7,23 +7,40 @@ use App\Models\Product;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::all();
+        $query = Product::query();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        if ($request->boolean('active_only')) {
+            $query->where('is_active', true);
+        }
+
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+
+        $products = $query->orderBy('category')->orderBy('name')->get();
         return response()->json($products);
     }
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'category' => 'in:snacks,bebidas,servicios_spa,otros',
+            'category' => 'required|in:snacks,bebidas,servicios_spa,otros',
             'price' => 'required|numeric|min:0',
-            'stock' => 'integer|min:0',
-            'is_active' => 'boolean',
+            'stock' => 'nullable|integer|min:0',
+            'is_active' => 'nullable|boolean',
         ]);
 
-        $product = Product::create($request->all());
+        $validated['stock'] = $validated['stock'] ?? 0;
+        $validated['is_active'] = $validated['is_active'] ?? true;
+
+        $product = Product::create($validated);
 
         return response()->json([
             'message' => 'Producto creado correctamente',
@@ -41,15 +58,15 @@ class ProductController extends Controller
     {
         $product = Product::findOrFail($id);
 
-        $request->validate([
-            'name' => 'string|max:255',
-            'category' => 'in:snacks,bebidas,servicios_spa,otros',
-            'price' => 'numeric|min:0',
-            'stock' => 'integer|min:0',
-            'is_active' => 'boolean',
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'category' => 'sometimes|required|in:snacks,bebidas,servicios_spa,otros',
+            'price' => 'sometimes|required|numeric|min:0',
+            'stock' => 'sometimes|required|integer|min:0',
+            'is_active' => 'nullable|boolean',
         ]);
 
-        $product->update($request->all());
+        $product->update($validated);
 
         return response()->json([
             'message' => 'Producto actualizado correctamente',

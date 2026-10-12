@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import PingTest from '../pages/PingTest';
 import Home from '../pages/Home';
 import RegisterGuest from '../pages/staff/RegisterGuest';
+import ProductManagement from '../pages/admin/ProductManagement';
 import StaffManagement from '../pages/staff/StaffManagement';
 import RoomManagement from '../pages/staff/RoomManagement';
 import HousekeepingDashboard from '../pages/staff/HousekeepingDashboard';
@@ -63,6 +64,11 @@ export default function AppRoutes({ pingStatus, setPingStatus }) {
       <Route path="/admin/personal" element={
         <ProtectedRoute allowedRoles={['admin']}>
           <StaffManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/productos" element={
+        <ProtectedRoute allowedRoles={['admin']}>
+          <ProductManagement />
         </ProtectedRoute>
       } />
       <Route path="/configuracion" element={
