@@ -30,7 +30,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1b1c19]/50 backdrop-blur-sm p-4">
-      <div className="bg-[#e5e4de] w-full max-w-md shadow-2xl overflow-hidden border border-[#d1c5af] relative">
+      <div role="dialog" aria-modal="true" aria-label="Recuperar contraseña" className="bg-[#e5e4de] w-full max-w-md shadow-2xl overflow-hidden border border-[#d1c5af] relative">
         <div className="bg-[#1b1c19] px-6 py-4 flex justify-between items-center border-b-2 border-[#c9a227]">
           <div>
             <h2 className="font-serif text-xl font-bold text-white tracking-widest uppercase">
@@ -40,7 +40,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
               Seguridad de Cuenta
             </p>
           </div>
-          <button onClick={onClose} className="text-[#a39f96] hover:text-white transition-colors">
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="text-[#a39f96] hover:text-white transition-colors">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -49,14 +49,14 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
           <p className="font-sans text-sm text-[#4d4635] mb-6">
             Ingrese el correo electrónico asociado a su cuenta. Le enviaremos un enlace seguro para restablecer su contraseña.
           </p>
-          
+
           <div className="space-y-6">
             <div>
-              <label className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
+              <label htmlFor="forgot-1" className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
                 Correo Electrónico
               </label>
-              <input 
-                type="email" 
+              <input id="forgot-1"
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ejemplo@correo.com"
@@ -65,7 +65,7 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
               />
             </div>
 
-            <button 
+            <button
               type="submit"
               disabled={loading}
               className="w-full bg-[#c9a227] hover:bg-[#b58f1a] text-[#14213d] font-bold font-mono text-xs uppercase tracking-widest py-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-[#a68a4d]"
@@ -76,10 +76,10 @@ export default function ForgotPasswordModal({ isOpen, onClose }) {
         </form>
       </div>
 
-      <Toast 
-        message={toastMessage} 
-        isOpen={!!toastMessage} 
-        onClose={() => setToastMessage(null)} 
+      <Toast
+        message={toastMessage}
+        isOpen={!!toastMessage}
+        onClose={() => setToastMessage(null)}
       />
     </div>
   );

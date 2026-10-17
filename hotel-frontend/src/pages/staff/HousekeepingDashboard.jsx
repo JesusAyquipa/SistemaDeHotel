@@ -1,11 +1,41 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import StaffSidebar from '../../components/StaffSidebar';
 import Toast from '../../components/Toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import HousekeepingTasks from '../../components/staff/HousekeepingTasks';
+import { roomAccountPath } from '../../utils/frontDesk';
 import { getStaffRooms, updateRoomStatus } from '../../services/roomStaffService';
 import echo from '../../services/echo';
+import { useAuth } from '../../context/AuthContext';
+import useRoomStatusChange, { isForceableError } from '../../hooks/useRoomStatusChange';
+import logError from '../../utils/logError';
+import { apiErrorMessage } from '../../utils/apiError';
 
 // Configuración de las columnas Kanban
+/** La habitación tiene un huésped con check-in activo (dato del servidor; respaldo: estado ocupada). */
+const hasGuest = (room) => (room.has_guest !== undefined && room.has_guest !== null
+  ? Boolean(room.has_guest)
+  : room.status === 'ocupada');
+
+/**
+ * Pista visual de transiciones inválidas (el servidor es la fuente de verdad).
+ * Devuelve el motivo por el que la opción está deshabilitada, o null.
+ */
+function invalidTargetReason(room, target) {
+  if (room.status === target) return null;
+  if (target === 'ocupada' && !hasGuest(room)) return 'solo mediante check-in';
+  if ((target === 'disponible' || target === 'mantenimiento') && hasGuest(room)) return 'huésped alojado';
+  return null;
+}
+
+const STATUS_OPTIONS = [
+  { value: 'disponible', label: 'Disponible' },
+  { value: 'ocupada', label: 'Ocupada' },
+  { value: 'limpieza', label: 'En Limpieza' },
+  { value: 'mantenimiento', label: 'Mantenimiento' },
+];
+
 const STATUS_COLUMNS = [
   { id: 'disponible', title: 'Disponibles', dotColor: 'bg-[#4caf50]', borderTop: 'border-t-[#4caf50]', bgColor: 'bg-white' },
   { id: 'ocupada', title: 'Ocupadas', dotColor: 'bg-[#1976d2]', borderTop: 'border-t-[#1976d2]', bgColor: 'bg-white' },
@@ -15,7 +45,6 @@ const STATUS_COLUMNS = [
 
 export default function HousekeepingDashboard() {
   const [rooms, setRooms] = useState([]);
-  const [metrics, setMetrics] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,8 +53,12 @@ export default function HousekeepingDashboard() {
   const [typeFilter, setTypeFilter] = useState('Todos los tipos');
 
   // Notificaciones Toast
-  const [toastMessage, setToastMessage] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [pendingChange, setPendingChange] = useState(null);
+  const { user } = useAuth();
+  // Pestañas: tablero Kanban de estados | tareas asignables (SHE-032)
+  const [view, setView] = useState('board');
+  const isAdmin = !!user?.roles?.includes('admin');
 
   const fetchRoomsData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -33,11 +66,9 @@ export default function HousekeepingDashboard() {
     try {
       const data = await getStaffRooms({ status: 'todos' });
       setRooms(data.rooms || []);
-      setMetrics(data.metrics || {});
     } catch (err) {
-      console.error('Error al cargar inventario de habitaciones:', err);
-      const msg = err.response?.data?.message || 'Error al cargar habitaciones.';
-      setError(msg);
+      logError('housekeeping:fetch', err);
+      setError(apiErrorMessage(err, 'Error al cargar habitaciones.'));
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -47,68 +78,73 @@ export default function HousekeepingDashboard() {
     fetchRoomsData();
   }, [fetchRoomsData]);
 
-  // WebSockets para actualizaciones en vivo
+  // WebSockets para actualizaciones en vivo (solo si Reverb está configurado)
+  const fetchRef = useRef(fetchRoomsData);
   useEffect(() => {
+    fetchRef.current = fetchRoomsData;
+  }, [fetchRoomsData]);
+
+  useEffect(() => {
+    if (!echo) return undefined;
     try {
       const channel = echo.channel('rooms');
       channel.listen('.room.status.updated', (eventData) => {
-        showNotification(
-          `🔔 Hab. ${eventData.room_number}: Estado cambió a ${eventData.new_status}`
-        );
-        fetchRoomsData(false);
+        setToast({ type: 'info', message: `Hab. ${eventData?.room_number}: estado cambió a ${eventData?.new_status}` });
+        fetchRef.current(false);
       });
-
       return () => {
         echo.leaveChannel('rooms');
       };
-    } catch (e) {
-      console.warn('WebSockets Reverb no disponible:', e);
+    } catch {
+      return undefined;
     }
-  }, [fetchRoomsData]);
+  }, []);
 
-  const showNotification = (msg) => {
-    setToastMessage(msg);
-    setShowToast(true);
+  const showNotification = (message, type = 'success') => {
+    setToast({ message, type });
   };
 
-  const handleStatusChange = async (roomId, newStatus, roomNumber) => {
+  /**
+   * Aplica el cambio (optimista) y devuelve el error de la API, o null si tuvo éxito.
+   */
+  const applyStatusChange = async ({ roomId, newStatus, roomNumber, oldStatus }, options = {}) => {
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status: newStatus } : r));
+
+    try {
+      await updateRoomStatus(roomId, newStatus, options);
+      showNotification(`Habitación ${roomNumber} actualizada a: ${newStatus}`);
+      fetchRoomsData(false);
+      return null;
+    } catch (err) {
+      logError('housekeeping:status', err);
+      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status: oldStatus } : r));
+      // Para un admin, el 409 con reservas afectadas abre el diálogo "Forzar" en lugar del aviso
+      if (!(isAdmin && isForceableError(err))) {
+        showNotification(apiErrorMessage(err, 'No se pudo actualizar el estado.'), 'error');
+      }
+      return err;
+    }
+  };
+
+  const { requestChange, dialogs: statusDialogs } = useRoomStatusChange({
+    isAdmin,
+    submit: applyStatusChange,
+  });
+
+  const handleStatusChange = (roomId, newStatus, roomNumber) => {
     const oldRoom = rooms.find((r) => r.id === roomId);
     if (!oldRoom || oldRoom.status === newStatus) return;
 
-    if ((oldRoom.status === 'ocupada' || oldRoom.status === 'reservada') && newStatus === 'disponible') {
-      alert(`Acción denegada:\n\nLa Habitación ${roomNumber} tiene un huésped actual. Para que vuelva a estar 'Disponible', no debes forzar el estado aquí. Debes ir a Recepción (Check-out) para procesar la salida del huésped correctamente.`);
-      setRooms([...rooms]); // trigger re-render to reset select
-      return;
-    }
+    const change = { roomId, newStatus, roomNumber, oldStatus: oldRoom.status };
 
-    if (newStatus === 'ocupada') {
-      alert(`Acción denegada:\n\nNo puedes marcar la Habitación ${roomNumber} como 'Ocupada' manualmente porque no sabríamos quién está adentro. Para ocuparla, crea una reserva y haz el Check-in. Así el sistema guardará los datos del huésped y su cuenta.`);
+    // Habitación con huésped que pasa a limpieza: confirmar (sigue alojado)
+    if (hasGuest(oldRoom) && newStatus === 'limpieza') {
+      setPendingChange(change);
       setRooms([...rooms]);
       return;
     }
 
-    if ((oldRoom.status === 'ocupada' || oldRoom.status === 'reservada') && (newStatus === 'limpieza' || newStatus === 'mantenimiento')) {
-      const confirmed = window.confirm(`⚠️ ADVERTENCIA:\n\nLa Habitación ${roomNumber} está actualmente ocupada por un huésped. Si cambias el estado a '${newStatus}', dejará de aparecer como 'Ocupada' en este tablero, aunque la reserva siga activa.\n\n¿Estás seguro de que deseas cambiar su estado físico?`);
-      if (!confirmed) {
-        setRooms([...rooms]);
-        return;
-      }
-    }
-
-    // Optimistic UI update
-    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status: newStatus } : r));
-
-    try {
-      await updateRoomStatus(roomId, newStatus);
-      showNotification(`Habitación ${roomNumber} actualizada a: ${newStatus}`);
-      fetchRoomsData(false);
-    } catch (err) {
-      console.error('Error al cambiar estado:', err);
-      // Revert on error
-      setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status: oldRoom.status } : r));
-      const msg = err.response?.data?.message || 'No se pudo actualizar el estado.';
-      showNotification(`❌ ${msg}`);
-    }
+    requestChange(change);
   };
 
   // Filtrado en el cliente (piso/tipo)
@@ -152,16 +188,44 @@ export default function HousekeepingDashboard() {
           </h1>
         </header>
 
-        <main className="px-8 pb-8 flex-grow flex flex-col">
+        <main className="px-4 md:px-8 pb-8 flex-grow flex flex-col">
+          <div role="tablist" aria-label="Vistas de housekeeping" className="flex gap-1 mb-6 border-b border-[#d1c5af]">
+            {[{ id: 'board', label: 'Tablero', icon: 'view_kanban' }, { id: 'tasks', label: 'Tareas', icon: 'task_alt' }].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={view === t.id}
+                onClick={() => setView(t.id)}
+                className={`inline-flex items-center gap-2 px-4 py-2 font-mono text-xs uppercase tracking-widest font-bold border-b-2 -mb-px cursor-pointer ${view === t.id ? 'border-[#c9a227] text-[#14213d]' : 'border-transparent text-[#78716c] hover:text-[#14213d]'}`}
+              >
+                <span className="material-symbols-outlined text-base" aria-hidden="true">{t.icon}</span>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'tasks' && (
+            <HousekeepingTasks
+              rooms={rooms}
+              isAdmin={isAdmin}
+              currentUser={user}
+              notify={showNotification}
+              onRoomsChanged={() => fetchRoomsData(false)}
+            />
+          )}
+
+          {view === 'board' && (<>
           {/* Barra de Filtros (Estilo papel/minimalista) */}
-          <div className="bg-white p-4 flex items-center gap-8 mb-8 shadow-sm">
+          <div className="bg-white p-4 flex flex-wrap items-center gap-4 sm:gap-8 mb-8 shadow-sm">
             <span className="font-mono text-xs font-bold text-[#c9a227] tracking-widest uppercase">
               FILTROS
             </span>
-            <div className="flex gap-6 items-center">
+            <div className="flex flex-wrap gap-6 items-center">
               <div className="flex items-center gap-2">
-                <label className="font-mono text-[10px] uppercase font-bold text-[#78716c]">Piso</label>
-                <select 
+                <label htmlFor="hk-floor" className="font-mono text-[10px] uppercase font-bold text-[#78716c]">Piso</label>
+                <select
+                  id="hk-floor"
                   value={floorFilter}
                   onChange={(e) => setFloorFilter(e.target.value)}
                   className="border-b border-[#78716c] pb-1 text-sm bg-transparent focus:outline-none font-medium cursor-pointer"
@@ -170,8 +234,9 @@ export default function HousekeepingDashboard() {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <label className="font-mono text-[10px] uppercase font-bold text-[#78716c]">Tipo</label>
-                <select 
+                <label htmlFor="hk-type" className="font-mono text-[10px] uppercase font-bold text-[#78716c]">Tipo</label>
+                <select
+                  id="hk-type"
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
                   className="border-b border-[#78716c] pb-1 text-sm bg-transparent focus:outline-none font-medium cursor-pointer capitalize"
@@ -181,6 +246,13 @@ export default function HousekeepingDashboard() {
               </div>
             </div>
           </div>
+
+          {error && (
+            <div role="alert" className="bg-[#ffdad6] border border-[#ba1a1a]/40 p-4 mb-6 text-[#93000a] font-mono text-xs flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg" aria-hidden="true">error</span>
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Tablero Kanban */}
           {loading ? (
@@ -207,8 +279,8 @@ export default function HousekeepingDashboard() {
                   {/* Lista de Tarjetas */}
                   <div className="flex flex-col gap-4">
                     {roomsByStatus[col.id]?.map((room) => (
-                      <div 
-                        key={room.id} 
+                      <div
+                        key={room.id}
                         className={`p-4 shadow-sm border border-gray-200 relative group flex flex-col ${col.bgColor}`}
                       >
                         {/* Header Tarjeta */}
@@ -220,30 +292,39 @@ export default function HousekeepingDashboard() {
                           }`}>
                             {room.room_number}
                           </div>
-                          
+
                           {/* Dropdown de Estado o Ver Cuenta */}
                           <div className="relative flex items-center gap-3">
                             {(room.status === 'ocupada' || room.status === 'reservada') && (
-                              <Link 
-                                to={`/recepcionista/habitaciones/${room.id}/cuenta`}
+                              <Link
+                                to={roomAccountPath(isAdmin, room.id)}
                                 className="text-[9px] font-mono font-bold uppercase tracking-widest text-[#c9a227] hover:text-[#987d35] transition-colors"
                               >
                                 Ver Cuenta
                               </Link>
                             )}
                             <div className="relative flex items-center">
-                              <select 
+                              <select
                                 className="appearance-none bg-transparent text-transparent text-xl font-bold leading-none cursor-pointer focus:outline-none focus:ring-0 text-right w-8 z-10 relative"
                                 style={{ border: 'none' }}
                                 value={room.status}
                                 onChange={(e) => handleStatusChange(room.id, e.target.value, room.room_number)}
                                 title="Cambiar estado"
                               >
-                                <option value="disponible" className="text-[#2d2d2a] text-sm">Disponible</option>
-                                <option value="ocupada" className="text-[#2d2d2a] text-sm">Ocupada</option>
                                 {room.status === 'reservada' && <option value="reservada" className="text-[#2d2d2a] text-sm">Reservada</option>}
-                                <option value="limpieza" className="text-[#2d2d2a] text-sm">En Limpieza</option>
-                                <option value="mantenimiento" className="text-[#2d2d2a] text-sm">Mantenimiento</option>
+                                {STATUS_OPTIONS.map((opt) => {
+                                  const blocked = invalidTargetReason(room, opt.value);
+                                  return (
+                                    <option
+                                      key={opt.value}
+                                      value={opt.value}
+                                      disabled={!!blocked}
+                                      className="text-[#2d2d2a] text-sm"
+                                    >
+                                      {blocked ? `${opt.label} (${blocked})` : opt.label}
+                                    </option>
+                                  );
+                                })}
                               </select>
                               <div className="absolute right-0 top-0 pointer-events-none text-[#a39f96] group-hover:text-[#2d2d2a] font-bold text-xl leading-none z-0">
                                 ...
@@ -296,10 +377,26 @@ export default function HousekeepingDashboard() {
               ))}
             </div>
           )}
+          </>)}
         </main>
       </div>
 
-      <Toast message={toastMessage} show={showToast} onClose={() => setShowToast(false)} />
+      <Toast message={toast?.message} isOpen={!!toast} type={toast?.type} onClose={() => setToast(null)} />
+
+      <ConfirmDialog
+        isOpen={!!pendingChange}
+        title="Cambiar estado de habitación ocupada"
+        message={pendingChange ? `La Habitación ${pendingChange.roomNumber} está ocupada por un huésped. Si cambias el estado a '${pendingChange.newStatus}', dejará de aparecer como 'Ocupada' en este tablero, aunque la reserva siga activa.\n\n¿Deseas cambiar su estado físico?` : ''}
+        confirmLabel="Sí, cambiar estado"
+        onCancel={() => setPendingChange(null)}
+        onConfirm={() => {
+          const change = pendingChange;
+          setPendingChange(null);
+          requestChange(change);
+        }}
+      />
+
+      {statusDialogs}
     </div>
   );
 }

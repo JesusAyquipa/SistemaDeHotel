@@ -58,7 +58,7 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
         newErrors.document_number = 'El DNI debe contener exactamente 8 números.';
       }
     } else {
-      if (!/^[a-zA-Z0-9\-]+$/.test(formData.document_number.trim())) {
+      if (!/^[a-zA-Z0-9-]+$/.test(formData.document_number.trim())) {
         newErrors.document_number = 'El número de documento solo debe contener letras, números o guiones.';
       }
     }
@@ -156,10 +156,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div>
-              <label className={`label-ledger ${errors.name ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-1" className={`label-ledger ${errors.name ? 'text-[#7A2E2E]' : ''}`}>
                 Nombre *
               </label>
-              <input
+              <input id="greg-1"
                 className={`input-ledger ${errors.name ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="text"
                 name="name"
@@ -173,10 +173,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className={`label-ledger ${errors.surname ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-2" className={`label-ledger ${errors.surname ? 'text-[#7A2E2E]' : ''}`}>
                 Apellidos *
               </label>
-              <input
+              <input id="greg-2"
                 className={`input-ledger ${errors.surname ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="text"
                 name="surname"
@@ -190,8 +190,8 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className="label-ledger">Tipo de Documento</label>
-              <select
+              <label htmlFor="greg-3" className="label-ledger">Tipo de Documento</label>
+              <select id="greg-3"
                 className="input-ledger appearance-none bg-transparent cursor-pointer"
                 name="document_type"
                 value={formData.document_type}
@@ -205,10 +205,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
 
             {/* Campo DNI / Documento con validación */}
             <div>
-              <label className={`label-ledger ${errors.document_number ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-4" className={`label-ledger ${errors.document_number ? 'text-[#7A2E2E]' : ''}`}>
                 Número de Documento ({formData.document_type}) *
               </label>
-              <input
+              <input id="greg-4"
                 className={`input-ledger ${
                   errors.document_number
                     ? 'border-[#7A2E2E] focus:border-[#7A2E2E] text-[#7A2E2E] font-mono'
@@ -228,10 +228,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className={`label-ledger ${errors.birth_date ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-5" className={`label-ledger ${errors.birth_date ? 'text-[#7A2E2E]' : ''}`}>
                 Fecha de Nacimiento
               </label>
-              <input
+              <input id="greg-5"
                 className={`input-ledger ${errors.birth_date ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="date"
                 name="birth_date"
@@ -244,10 +244,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className={`label-ledger ${errors.nationality ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-6" className={`label-ledger ${errors.nationality ? 'text-[#7A2E2E]' : ''}`}>
                 Nacionalidad
               </label>
-              <input
+              <input id="greg-6"
                 className={`input-ledger ${errors.nationality ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="text"
                 name="nationality"
@@ -271,10 +271,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div>
-              <label className={`label-ledger ${errors.phone ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-7" className={`label-ledger ${errors.phone ? 'text-[#7A2E2E]' : ''}`}>
                 Teléfono de Contacto
               </label>
-              <input
+              <input id="greg-7"
                 className={`input-ledger ${errors.phone ? 'border-[#7A2E2E] focus:border-[#7A2E2E]' : ''}`}
                 type="tel"
                 name="phone"
@@ -288,10 +288,10 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div>
-              <label className={`label-ledger ${errors.email ? 'text-[#7A2E2E]' : ''}`}>
+              <label htmlFor="greg-8" className={`label-ledger ${errors.email ? 'text-[#7A2E2E]' : ''}`}>
                 Correo Electrónico *
               </label>
-              <input
+              <input id="greg-8"
                 className={`input-ledger ${
                   errors.email
                     ? 'border-[#7A2E2E] focus:border-[#7A2E2E] text-[#7A2E2E] font-mono'
@@ -309,8 +309,8 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
             </div>
 
             <div className="md:col-span-2">
-              <label className="label-ledger">Dirección de Domicilio</label>
-              <input
+              <label htmlFor="greg-9" className="label-ledger">Dirección de Domicilio</label>
+              <input id="greg-9"
                 className="input-ledger"
                 type="text"
                 name="address"
@@ -330,8 +330,8 @@ export default function GuestRegistrationForm({ onSuccess, onCancel }) {
           </h3>
 
           <div>
-            <label className="label-ledger">Observaciones y Preferencias</label>
-            <textarea
+            <label htmlFor="greg-10" className="label-ledger">Observaciones y Preferencias</label>
+            <textarea id="greg-10"
               className="input-ledger resize-none h-28"
               name="notes"
               value={formData.notes}

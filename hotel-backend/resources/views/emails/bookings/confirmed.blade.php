@@ -17,12 +17,12 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima Hotel</h1>
+            <h1>{{ config('hotel.name') }}</h1>
             <p>Confirmación de Reserva</p>
         </div>
         <div class="content">
             <p>Hola <strong>{{ $booking->guest->name }} {{ $booking->guest->surname }}</strong>,</p>
-            <p>¡Tu reserva ha sido confirmada con éxito! Estamos muy emocionados de recibirte en Sheraton Lima Hotel.</p>
+            <p>¡Tu reserva ha sido confirmada con éxito! Estamos muy emocionados de recibirte en {{ config('hotel.name') }}.</p>
             
             <div class="details-box">
                 <p><strong>Código de Reserva:</strong> {{ $booking->booking_code }}</p>
@@ -45,7 +45,7 @@
             <p>¡Buen viaje y nos vemos pronto!</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} {{ config('hotel.name') }}. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

@@ -56,6 +56,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | URL pública de la SPA (React). Se usa para construir enlaces en correos
+    | (p. ej. restablecer contraseña) y como origen permitido en CORS.
+    |
+    */
+
+    'frontend_url' => rtrim(env('FRONTEND_URL', 'http://localhost:5173'), '/'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

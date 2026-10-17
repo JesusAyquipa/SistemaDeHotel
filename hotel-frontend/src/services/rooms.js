@@ -11,6 +11,7 @@ export const getAvailableRooms = async (params = {}) => {
   if (params.check_in) cleanParams.check_in = params.check_in;
   if (params.check_out) cleanParams.check_out = params.check_out;
   if (params.bed_type && params.bed_type !== 'todos') cleanParams.bed_type = params.bed_type;
+  if (params.room_type && params.room_type !== 'todos') cleanParams.room_type = params.room_type;
   if (params.capacity && Number(params.capacity) > 0) cleanParams.capacity = params.capacity;
   if (params.min_price && Number(params.min_price) >= 0) cleanParams.min_price = params.min_price;
   if (params.max_price && Number(params.max_price) > 0) cleanParams.max_price = params.max_price;
@@ -30,7 +31,18 @@ export const getRoomBookedDates = async (roomId, excludeBookingId = null) => {
   return response.data.booked_dates;
 };
 
+/**
+ * Detalle público de una habitación (precio de temporada, amenidades, imágenes).
+ * @param {number|string} roomId
+ * @returns {Promise<Object>} room
+ */
+export const getRoomDetail = async (roomId, { signal } = {}) => {
+  const response = await api.get(`/rooms/${roomId}`, { signal });
+  return response.data.room;
+};
+
 export default {
   getAvailableRooms,
   getRoomBookedDates,
+  getRoomDetail,
 };

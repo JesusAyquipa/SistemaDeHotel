@@ -1,29 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchReceipt } from '../services/paymentService';
+import { HOTEL_NAME } from '../constants/hotel';
+import formatCurrency from '../utils/formatCurrency';
+import { apiErrorMessage } from '../utils/apiError';
+import logError from '../utils/logError';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 /**
  * Componente modal para visualizar e imprimir el Comprobante Digital de Pago (Voucher / Recibo).
  */
-export default function PaymentReceiptModal({ bookingCode, onClose }) {
+export default function PaymentReceiptModal({ bookingCode, guestEmail = null, onClose }) {
   const [receiptData, setReceiptData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const copyTimerRef = useRef(null);
+
+  useEscapeKey(onClose);
+  useEffect(() => () => clearTimeout(copyTimerRef.current), []);
 
   useEffect(() => {
     let isMounted = true;
     const loadReceipt = async () => {
       try {
         setLoading(true);
-        const data = await fetchReceipt(bookingCode);
+        const data = await fetchReceipt(bookingCode, guestEmail);
         if (isMounted) {
           setReceiptData(data.receipt);
         }
       } catch (err) {
         if (isMounted) {
-          console.error('Error al cargar comprobante:', err);
-          const msg = err.response?.data?.message || 'No se pudo obtener el comprobante de pago.';
-          setError(msg);
+          logError('receipt:fetch', err);
+          setError(apiErrorMessage(err, 'No se pudo obtener el comprobante de pago.'));
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -34,13 +42,14 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
       loadReceipt();
     }
     return () => { isMounted = false; };
-  }, [bookingCode]);
+  }, [bookingCode, guestEmail]);
 
   const handleCopyCode = () => {
     if (bookingCode) {
-      navigator.clipboard.writeText(bookingCode);
+      navigator.clipboard?.writeText(bookingCode).catch(() => {});
       setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedCode(false), 2000);
     }
   };
 
@@ -50,30 +59,35 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#14213d]/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn print:p-0 print:bg-white">
-      <div className="bg-[#fbf9f4] border-2 border-[#c9a227] shadow-[6px_6px_0px_#14213d] max-w-2xl w-full flex flex-col overflow-hidden print:shadow-none print:border-none print:max-w-none">
-        
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receipt-title"
+        className="bg-[#fbf9f4] border-2 border-[#c9a227] shadow-[6px_6px_0px_#14213d] max-w-2xl w-full flex flex-col overflow-hidden print:shadow-none print:border-none print:max-w-none"
+      >
+
         {/* Modal Header (Oculto al imprimir) */}
         <div className="bg-[#14213d] text-[#fbf9f4] p-5 text-center border-b border-[#c9a227] relative print:hidden">
           <button
             type="button"
             onClick={onClose}
             className="absolute top-4 right-4 text-[#d1c5af] hover:text-white transition-colors cursor-pointer"
-            title="Cerrar"
+            aria-label="Cerrar"
           >
-            <span className="material-symbols-outlined text-2xl">close</span>
+            <span className="material-symbols-outlined text-2xl" aria-hidden="true">close</span>
           </button>
-          
+
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#c9a227]/20 border border-[#c9a227] mb-2">
             <span className="material-symbols-outlined text-2xl text-[#c9a227]">
               verified
             </span>
           </div>
-          
+
           <span className="font-mono text-[10px] text-[#c9a227] uppercase tracking-widest block font-bold">
             Comprobante Electrónico de Pago
           </span>
-          <h2 className="font-serif text-xl sm:text-2xl font-bold text-[#fbf9f4]">
-            Sheraton Lima Hotel & Convention Center
+          <h2 id="receipt-title" className="font-serif text-xl sm:text-2xl font-bold text-[#fbf9f4]">
+            {HOTEL_NAME}
           </h2>
         </div>
 
@@ -113,7 +127,7 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
             <div className="flex flex-col sm:flex-row justify-between items-start border-b-2 border-[#14213d] pb-4 gap-4">
               <div>
                 <h1 className="font-serif text-xl font-bold text-[#14213d]">
-                  {receiptData.hotel?.name}
+                  {receiptData.hotel?.name || HOTEL_NAME}
                 </h1>
                 <p className="font-mono text-[11px] text-[#4d4635]">
                   {receiptData.hotel?.address}
@@ -160,16 +174,13 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
 
             {/* Grid 2 Columnas: Huésped & Estadía */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
-              
+
               {/* Datos del Huésped */}
               <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 space-y-1.5">
                 <span className="text-[10px] font-bold text-[#755b00] uppercase block border-b border-[#d1c5af] pb-1">
                   Datos del Huésped
                 </span>
                 <p className="font-bold text-sm text-[#1b1c19]">{receiptData.guest?.name}</p>
-                <p className="text-[11px] text-[#4d4635]">
-                  {receiptData.guest?.document_type}: {receiptData.guest?.document_number}
-                </p>
                 <p className="text-[11px] text-[#4d4635]">{receiptData.guest?.email}</p>
                 {receiptData.guest?.phone && (
                   <p className="text-[11px] text-[#4d4635]">Tel: {receiptData.guest?.phone}</p>
@@ -198,8 +209,8 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
             </div>
 
             {/* Tabla / Desglose de Transacción */}
-            <div className="border border-[#d1c5af] overflow-hidden">
-              <table className="w-full font-mono text-xs text-left">
+            <div className="border border-[#d1c5af] overflow-x-auto">
+              <table className="w-full min-w-[480px] font-mono text-xs text-left">
                 <thead className="bg-[#14213d] text-[#fbf9f4]">
                   <tr>
                     <th className="p-2.5 font-bold uppercase text-[10px]">Concepto</th>
@@ -214,19 +225,37 @@ export default function PaymentReceiptModal({ bookingCode, onClose }) {
                       Alojamiento en {receiptData.room?.name} (Hab. {receiptData.room?.room_number})
                     </td>
                     <td className="p-2.5 text-center">{receiptData.stay?.nights}</td>
-                    <td className="p-2.5 text-right">S/ {Number(receiptData.stay?.price_per_night).toFixed(2)}</td>
+                    <td className="p-2.5 text-right">{formatCurrency(receiptData.stay?.price_per_night)}</td>
                     <td className="p-2.5 text-right font-bold">
-                      S/ {(receiptData.stay?.nights * Number(receiptData.stay?.price_per_night)).toFixed(2)}
+                      {formatCurrency(receiptData.stay?.sub_total ?? receiptData.stay?.total_amount ?? receiptData.payment?.amount)}
                     </td>
                   </tr>
                 </tbody>
                 <tfoot className="bg-[#f5f3ee] border-t-2 border-[#14213d]">
+                  {Number(receiptData.stay?.discount) > 0 && (
+                    <tr>
+                      <td colSpan="3" className="p-2.5 text-right text-[#ba1a1a]">Descuento:</td>
+                      <td className="p-2.5 text-right text-[#ba1a1a]">- {formatCurrency(receiptData.stay.discount)}</td>
+                    </tr>
+                  )}
+                  {receiptData.tax && (
+                    <>
+                      <tr>
+                        <td colSpan="3" className="p-2.5 text-right text-[#4d4635]">Base imponible:</td>
+                        <td className="p-2.5 text-right">{formatCurrency(receiptData.tax.base)}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan="3" className="p-2.5 text-right text-[#4d4635]">IGV ({Math.round(Number(receiptData.tax.rate) * (Number(receiptData.tax.rate) < 1 ? 100 : 1))}%, incluido):</td>
+                        <td className="p-2.5 text-right">{formatCurrency(receiptData.tax.amount)}</td>
+                      </tr>
+                    </>
+                  )}
                   <tr>
                     <td colSpan="3" className="p-2.5 text-right font-serif font-bold text-sm text-[#14213d]">
                       TOTAL PAGADO (IGV Incluido):
                     </td>
                     <td className="p-2.5 text-right font-mono font-bold text-base text-[#14213d] bg-[#c9a227]/20 border border-[#c9a227]">
-                      S/ {Number(receiptData.payment?.amount).toFixed(2)} {receiptData.payment?.currency}
+                      {formatCurrency(receiptData.payment?.amount)}
                     </td>
                   </tr>
                 </tfoot>

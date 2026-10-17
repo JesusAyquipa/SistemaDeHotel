@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import EditBookingModal from './staff/EditBookingModal';
 import ProfileModal from './ProfileModal';
+import assetUrl from '../utils/assetUrl';
+import { HOTEL_NAME } from '../constants/hotel';
 
 export default function StaffSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -20,8 +22,7 @@ export default function StaffSidebar() {
   // Format role
   const isAdmin = user?.roles?.includes('admin');
   const basePath = isAdmin ? '/admin' : '/recepcionista';
-  const displayRole = isAdmin ? 'Administrador' : 
-                      user?.roles?.includes('recepcionista') ? 'Recepcionista' : 'Staff';
+  const displayRole = isAdmin ? 'Administrador' : 'Recepcionista';
   const displayName = user?.name || 'Cargando...';
 
   const navContent = (
@@ -30,7 +31,7 @@ export default function StaffSidebar() {
       <div className="mb-6 p-2 flex items-center justify-between">
         <Link to="/" className="no-underline">
           <h1 className="font-serif font-bold text-xl tracking-tight text-[#1b1c19]">
-            Sheraton Lima
+            {HOTEL_NAME}
           </h1>
           <span className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider block">
             Sistema Hotelero
@@ -42,18 +43,20 @@ export default function StaffSidebar() {
           className="md:hidden text-[#4d4635] hover:text-[#1b1c19] p-1"
           aria-label="Cerrar menú"
         >
-          <span className="material-symbols-outlined">close</span>
+          <span className="material-symbols-outlined" aria-hidden="true">close</span>
         </button>
       </div>
 
       <div className="mb-6 px-2">
-        <div 
+        <button
+          type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="flex items-center gap-3 mb-2 cursor-pointer hover:bg-[#eae8e3] p-1.5 rounded-lg transition-colors -ml-1.5 group"
+          aria-label="Abrir mi perfil"
+          className="w-full text-left flex items-center gap-3 mb-2 cursor-pointer hover:bg-[#eae8e3] p-1.5 rounded-lg transition-colors -ml-1.5 group"
         >
           <div className="w-10 h-10 rounded-xl bg-[#e4e2dd] flex items-center justify-center overflow-hidden border border-[#d1c5af] flex-shrink-0 group-hover:border-[#987d35] transition-colors">
             {user?.image_url ? (
-              <img src={`http://localhost:8000${user.image_url}`} alt="Profile" className="w-full h-full object-cover" />
+              <img src={assetUrl(user.image_url)} alt="" className="w-full h-full object-cover" />
             ) : (
               <span className="material-symbols-outlined text-[#525e7d]">account_circle</span>
             )}
@@ -62,7 +65,7 @@ export default function StaffSidebar() {
             <div className="font-serif font-semibold text-sm text-[#1b1c19] truncate">{displayRole}</div>
             <div className="font-mono text-xs text-[#4d4635] truncate group-hover:text-[#987d35] transition-colors">{displayName}</div>
           </div>
-        </div>
+        </button>
         <button onClick={() => setIsNewBookingModalOpen(true)} className="w-full mt-2 btn-primary text-xs py-2 cursor-pointer">
           + Nueva Reserva
         </button>
@@ -71,6 +74,27 @@ export default function StaffSidebar() {
       {/* Navigation Items */}
       <div className="flex-1 overflow-y-auto">
         <ul className="space-y-1 px-1">
+          {/* Recepción: Hoy, Rack y Housekeeping (SHE-030/031/032) */}
+          {[
+            { to: `${basePath}/hoy`, icon: 'today', label: 'Hoy' },
+            { to: `${basePath}/rack`, icon: 'view_timeline', label: 'Rack' },
+            ...(isAdmin ? [{ to: '/admin/housekeeping', icon: 'cleaning_services', label: 'Housekeeping' }] : []),
+          ].map((item) => (
+            <li key={item.to}>
+              <Link
+                to={item.to}
+                onClick={() => setMobileOpen(false)}
+                aria-current={activePath === item.to ? 'page' : undefined}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath === item.to
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">{item.icon}</span>
+                <span className="font-mono text-xs uppercase tracking-wider">{item.label}</span>
+              </Link>
+            </li>
+          ))}
           <li>
             <Link
               to={`${basePath}/habitaciones`}
@@ -99,7 +123,7 @@ export default function StaffSidebar() {
           </li>
           <li>
             <Link
-              to={`${basePath}/huespedes/nuevo`}
+              to={`${basePath}/huespedes`}
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/huespedes')
                   ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00] shadow-sm'
@@ -122,6 +146,21 @@ export default function StaffSidebar() {
               >
                 <span className="material-symbols-outlined">inventory_2</span>
                 <span className="font-mono text-xs uppercase tracking-wider">Productos</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to="/admin/tipos-habitacion"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/tipos-habitacion')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">category</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Tipos de hab.</span>
               </Link>
             </li>
           )}
@@ -152,6 +191,66 @@ export default function StaffSidebar() {
               >
                 <span className="material-symbols-outlined">manage_accounts</span>
                 <span className="font-mono text-xs uppercase tracking-wider">Personal</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to="/admin/comprobantes"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.startsWith('/admin/comprobantes')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">receipt_long</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Comprobantes</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to="/admin/reembolsos"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.startsWith('/admin/reembolsos')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">currency_exchange</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Reembolsos</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to="/admin/auditoria"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/auditoria')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">history</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Auditoría</span>
+              </Link>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <Link
+                to="/admin/resenas"
+                onClick={() => setMobileOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded text-sm transition-all ${activePath.includes('/resenas')
+                    ? 'bg-[#c9a227] text-[#4b3a00] font-bold border-r-4 border-[#755b00]'
+                    : 'text-[#4d4635] hover:bg-[#eae8e3]'
+                  }`}
+              >
+                <span className="material-symbols-outlined">reviews</span>
+                <span className="font-mono text-xs uppercase tracking-wider">Reseñas</span>
               </Link>
             </li>
           )}
@@ -203,7 +302,7 @@ export default function StaffSidebar() {
           >
             <span className="material-symbols-outlined text-2xl">menu</span>
           </button>
-          <span className="font-serif font-bold text-sm text-[#1b1c19]">HOTEL SHERATON</span>
+          <span className="font-serif font-bold text-sm text-[#1b1c19] uppercase">{HOTEL_NAME}</span>
         </div>
         <span className="font-mono text-xs bg-[#c9a227]/20 text-[#755b00] px-2 py-0.5 rounded font-semibold">
           {displayRole}
@@ -214,6 +313,7 @@ export default function StaffSidebar() {
       {mobileOpen && (
         <div
           onClick={toggleMobileMenu}
+          aria-hidden="true"
           className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-xs z-40 transition-opacity"
         />
       )}
@@ -241,10 +341,12 @@ export default function StaffSidebar() {
       )}
 
       {/* Profile Modal */}
-      <ProfileModal 
-        isOpen={isProfileModalOpen} 
-        onClose={() => setIsProfileModalOpen(false)} 
-      />
+      {isProfileModalOpen && (
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+        />
+      )}
     </>
   );
 }

@@ -1,29 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { BACKEND_ORIGIN } from '../utils/assetUrl';
 
-export default function PingTest({ setPingStatus }) {
+export default function PingTest() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const checkPing = async () => {
+  const checkPing = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await api.get('/ping');
       setData(response.data);
-      if (setPingStatus) setPingStatus({ connected: true, data: response.data });
-    } catch (err) {
-      setError(err.message || 'Error de conexión con la API de Laravel');
-      if (setPingStatus) setPingStatus({ connected: false });
+    } catch {
+      setData(null);
+      setError('Error de conexión con la API de Laravel');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkPing();
-  }, []);
+  }, [checkPing]);
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -48,14 +48,14 @@ export default function PingTest({ setPingStatus }) {
 
         {loading && (
           <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 text-center animate-pulse">
-            <span className="text-indigo-400 font-medium">Realizando petición a http://localhost:8000/api/ping...</span>
+            <span className="text-indigo-400 font-medium">Realizando petición a {BACKEND_ORIGIN || window.location.origin}/api/ping...</span>
           </div>
         )}
 
         {error && (
           <div className="bg-amber-950/40 border border-amber-800/50 p-5 rounded-xl text-amber-300">
             <div className="font-bold flex items-center gap-2 text-lg">
-              <span>⚠️</span> Backend No Detectado en http://localhost:8000
+              <span>⚠️</span> Backend No Detectado en {BACKEND_ORIGIN || window.location.origin}
             </div>
             <p className="text-sm text-amber-400/90 mt-2">
               Asegúrate de haber iniciado el servidor de Laravel en la carpeta <code className="bg-amber-900/50 px-2 py-0.5 rounded">hotel-backend</code> con:

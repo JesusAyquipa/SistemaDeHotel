@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class BookingCancelledMail extends Mailable
+class BookingCancelledMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -24,6 +24,8 @@ class BookingCancelledMail extends Mailable
      */
     public function __construct(Booking $booking, $refundPercentage, $refundAmount, $paymentMethod)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->booking = $booking;
         $this->refundPercentage = $refundPercentage;
         $this->refundAmount = $refundAmount;

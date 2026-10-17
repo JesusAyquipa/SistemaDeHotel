@@ -5,49 +5,53 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Services\BookingAvailabilityService;
+use App\Services\CouponService;
 use App\Services\Payment\PaymentGatewayInterface;
+use App\Services\RefundPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Controlador de webhooks de la pasarela de pago.
- * Recibe notificaciones asíncronas de confirmación/fallo de pagos
- * y actualiza el estado de reservas y pagos de forma idempotente.
+ * Webhooks de la pasarela de pago. Requiere firma válida:
+ *  - simulador: header X-Signature = hex(hmac_sha256(raw body, PAYMENT_WEBHOOK_SECRET))
+ *  - Stripe:    header Stripe-Signature
+ * Sin firma, firma inválida o secreto no configurado -> 401. El procesamiento es idempotente.
  */
 class PaymentWebhookController extends Controller
 {
-    private PaymentGatewayInterface $paymentGateway;
-
-    public function __construct(PaymentGatewayInterface $paymentGateway)
-    {
-        $this->paymentGateway = $paymentGateway;
+    public function __construct(
+        private PaymentGatewayInterface $paymentGateway,
+        private CouponService $coupons,
+        private BookingAvailabilityService $availability,
+    ) {
     }
 
     /**
-     * Recibe y procesa un webhook de la pasarela de pago.
-     * Valida la firma criptográfica del evento y actualiza la reserva y pago.
-     *
      * POST /api/webhooks/payment
      */
     public function handleWebhook(Request $request): JsonResponse
     {
         $payload = $request->getContent();
-        $signatureHeader = $request->header('Stripe-Signature', $request->header('X-Webhook-Signature', ''));
+        $signature = (string) ($request->header('X-Signature') ?? $request->header('Stripe-Signature') ?? '');
+
+        if ($signature === '') {
+            return response()->json(['message' => 'Firma inválida.'], 401);
+        }
 
         try {
-            $event = $this->paymentGateway->verifyWebhookSignature($payload, $signatureHeader);
-        } catch (\Exception $e) {
+            $event = $this->paymentGateway->verifyWebhookSignature($payload, $signature);
+        } catch (\Throwable $e) {
             Log::warning('Webhook signature verification failed', [
-                'error'    => $e->getMessage(),
                 'provider' => $this->paymentGateway->getProviderName(),
             ]);
-            return response()->json(['error' => 'Firma inválida.'], 403);
+            return response()->json(['message' => 'Firma inválida.'], 401);
         }
 
         $eventType = $event['type'] ?? null;
-        $eventData = $event['data'] ?? [];
+        $eventData = is_array($event['data'] ?? null) ? $event['data'] : [];
 
         Log::info('Webhook received', [
             'type'     => $eventType,
@@ -55,100 +59,99 @@ class PaymentWebhookController extends Controller
         ]);
 
         return match ($eventType) {
-            'payment_intent.succeeded'       => $this->handlePaymentSucceeded($eventData),
-            'payment_intent.payment_failed'  => $this->handlePaymentFailed($eventData),
-            default => response()->json(['message' => 'Evento no manejado: ' . $eventType]),
+            'payment_intent.succeeded'      => $this->handlePaymentSucceeded($eventData),
+            'payment_intent.payment_failed' => $this->handlePaymentFailed($eventData),
+            default => response()->json(['message' => 'Evento no manejado.']),
         };
     }
 
     /**
-     * Procesa un evento de pago exitoso.
-     * Actualiza el pago a 'completed' y la reserva a 'confirmed' de forma idempotente.
+     * Pago exitoso: pago -> completed, reserva -> confirmed (idempotente).
      */
     private function handlePaymentSucceeded(array $data): JsonResponse
     {
         $transactionId = $data['id'] ?? null;
-
         if (!$transactionId) {
-            return response()->json(['error' => 'Transaction ID no proporcionado.'], 400);
+            return response()->json(['message' => 'Transaction ID no proporcionado.'], 422);
         }
 
-        $payment = Payment::where('transaction_id', $transactionId)->first();
+        return DB::transaction(function () use ($transactionId, $data) {
+            $payment = Payment::where('transaction_id', $transactionId)->lockForUpdate()->first();
 
-        if (!$payment) {
-            Log::warning('Webhook: Payment not found for transaction', ['transaction_id' => $transactionId]);
-            return response()->json(['message' => 'Pago no encontrado.'], 404);
-        }
+            if (!$payment) {
+                Log::warning('Webhook: Payment not found for transaction', ['transaction_id' => $transactionId]);
+                return response()->json(['message' => 'Pago no encontrado.'], 404);
+            }
 
-        // Idempotencia: si ya fue procesado, ignorar
-        if ($payment->status === 'completed') {
-            return response()->json(['message' => 'Pago ya procesado previamente.']);
-        }
+            if ($payment->status === Payment::STATUS_COMPLETED) {
+                return response()->json(['message' => 'Pago ya procesado previamente.']);
+            }
 
-        $receiptNumber = Payment::generateReceiptNumber();
+            $booking = Booking::whereKey($payment->booking_id)->lockForUpdate()->first();
 
-        DB::transaction(function () use ($payment, $data, $receiptNumber) {
             $payment->update([
-                'status'          => 'completed',
-                'receipt_number'  => $receiptNumber,
+                'status'          => Payment::STATUS_COMPLETED,
+                'receipt_number'  => $payment->receipt_number ?? Payment::generateReceiptNumber(),
                 'paid_at'         => now(),
-                'payment_details' => [
+                'payment_details' => array_merge($payment->payment_details ?? [], [
                     'brand'         => $data['payment_method_details']['card']['brand'] ?? null,
                     'last4'         => $data['payment_method_details']['card']['last4'] ?? null,
                     'authorized_at' => now()->toIso8601String(),
-                ],
+                ]),
             ]);
 
-            $booking = $payment->booking;
-            $booking->update(['status' => 'confirmed']);
-            // No cambiamos el estado base de la habitación, para que siga apareciendo en el catálogo para otras fechas.
+            $canConfirm = $booking
+                && in_array($booking->status, [Booking::STATUS_PENDING_PAYMENT, Booking::STATUS_EXPIRED], true)
+                && !$this->availability->hasOverlap($booking->room_id, $booking->check_in, $booking->check_out, $booking->id)
+                && $this->coupons->consumeForBooking($booking);
+
+            if ($canConfirm) {
+                $booking->update(['status' => Booking::STATUS_CONFIRMED, 'expires_at' => null]);
+            } elseif ($booking && !in_array($booking->status, [Booking::STATUS_CONFIRMED, Booking::STATUS_CHECKED_IN, Booking::STATUS_CHECKED_OUT], true)) {
+                // El cobro llegó tarde (reserva expirada/cancelada o habitación ya tomada): se devuelve.
+                RefundPolicy::recordRefund($booking, (float) $payment->amount, 'Pago recibido para una reserva no disponible');
+                Log::warning('Webhook: payment for unavailable booking, refund recorded', ['booking_id' => $booking->id]);
+            }
+
+            return response()->json(['message' => 'Pago confirmado exitosamente.']);
         });
-
-        Log::info('Webhook: Payment succeeded', [
-            'transaction_id' => $transactionId,
-            'receipt_number' => $receiptNumber,
-        ]);
-
-        return response()->json(['message' => 'Pago confirmado exitosamente.']);
     }
 
     /**
-     * Procesa un evento de pago fallido.
-     * Actualiza el pago a 'failed' y cancela la reserva.
+     * Pago fallido: pago -> failed, reserva pendiente -> cancelled (idempotente).
      */
     private function handlePaymentFailed(array $data): JsonResponse
     {
         $transactionId = $data['id'] ?? null;
-
         if (!$transactionId) {
-            return response()->json(['error' => 'Transaction ID no proporcionado.'], 400);
+            return response()->json(['message' => 'Transaction ID no proporcionado.'], 422);
         }
 
-        $payment = Payment::where('transaction_id', $transactionId)->first();
+        return DB::transaction(function () use ($transactionId, $data) {
+            $payment = Payment::where('transaction_id', $transactionId)->lockForUpdate()->first();
 
-        if (!$payment) {
-            return response()->json(['message' => 'Pago no encontrado.'], 404);
-        }
+            if (!$payment) {
+                return response()->json(['message' => 'Pago no encontrado.'], 404);
+            }
 
-        // Idempotencia
-        if (in_array($payment->status, ['failed', 'completed'])) {
-            return response()->json(['message' => 'Pago ya procesado previamente.']);
-        }
+            if (in_array($payment->status, [Payment::STATUS_FAILED, Payment::STATUS_COMPLETED], true)) {
+                return response()->json(['message' => 'Pago ya procesado previamente.']);
+            }
 
-        DB::transaction(function () use ($payment, $data) {
             $payment->update([
-                'status'          => 'failed',
-                'payment_details' => [
+                'status'          => Payment::STATUS_FAILED,
+                'payment_details' => array_merge($payment->payment_details ?? [], [
                     'decline_reason' => $data['last_payment_error']['code'] ?? 'unknown',
-                    'decline_message' => $data['last_payment_error']['message'] ?? 'Pago rechazado.',
-                ],
+                ]),
             ]);
 
-            $payment->booking->update(['status' => 'cancelled']);
+            $booking = Booking::whereKey($payment->booking_id)->lockForUpdate()->first();
+            if ($booking && $booking->status === Booking::STATUS_PENDING_PAYMENT) {
+                $this->coupons->releaseForBooking($booking);
+                $booking->update(['status' => Booking::STATUS_CANCELLED, 'expires_at' => null]);
+            }
+
+            return response()->json(['message' => 'Pago fallido registrado.']);
         });
-
-        Log::info('Webhook: Payment failed', ['transaction_id' => $transactionId]);
-
-        return response()->json(['message' => 'Pago fallido registrado.']);
     }
 }

@@ -30,11 +30,16 @@ export const processMockPayment = async (paymentData) => {
 /**
  * Obtiene el comprobante de pago (receipt) de una reserva confirmada.
  *
+ * El backend permite verlo al dueño autenticado, al personal, o a quien indique el
+ * correo del huésped (`email`), para que los huéspedes sin sesión puedan consultarlo.
+ *
  * @param {string} bookingCode - Código de reserva (ej: RES-8K9W2B4F)
+ * @param {string|null} email - Correo del huésped ingresado en el checkout (opcional)
  * @returns {Promise<Object>} Datos completos del comprobante/recibo
  */
-export const fetchReceipt = async (bookingCode) => {
-  const response = await api.get(`/bookings/${bookingCode}/receipt`);
+export const fetchReceipt = async (bookingCode, email = null) => {
+  const params = email ? { email } : undefined;
+  const response = await api.get(`/bookings/${encodeURIComponent(bookingCode)}/receipt`, { params });
   return response.data;
 };
 

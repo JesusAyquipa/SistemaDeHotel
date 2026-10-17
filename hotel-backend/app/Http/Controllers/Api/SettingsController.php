@@ -3,88 +3,193 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Season;
 use App\Models\Coupon;
+use App\Models\Season;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 
 class SettingsController extends Controller
 {
-    public function index()
+    /** Mensaje genérico para cualquier cupón no utilizable (no revela el motivo). */
+    private const INVALID_COUPON_MESSAGE = 'El cupón no es válido o ya no está disponible.';
+
+    public function index(): JsonResponse
     {
         return response()->json([
-            'seasons' => Season::all(),
-            'coupons' => Coupon::all()
+            'seasons' => Season::with('roomType:id,name')->orderBy('start_date')->get(),
+            'coupons' => Coupon::orderBy('code')->get(),
         ]);
     }
 
-    public function storeSeason(Request $request)
+    // ─────────────────────────────────────────────────────────────
+    // Temporadas
+    // ─────────────────────────────────────────────────────────────
+
+    public function storeSeason(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
-            'rate_adjustment' => 'required|numeric',
-        ]);
-        $season = Season::create($validated);
-        return response()->json($season);
+        $season = Season::create($this->validatedSeasonData($request));
+
+        return response()->json($season, 201);
     }
-    
-    public function updateSeason(Request $request, $id)
+
+    public function updateSeason(Request $request, $id): JsonResponse
     {
         $season = Season::findOrFail($id);
-        $season->update($request->all());
-        return response()->json($season);
+        $season->update($this->validatedSeasonData($request, $season));
+
+        return response()->json($season->fresh());
     }
 
-    public function destroySeason($id)
+    public function destroySeason($id): JsonResponse
     {
-        Season::destroy($id);
+        Season::findOrFail($id)->delete();
+
         return response()->json(['success' => true]);
     }
 
-    public function storeCoupon(Request $request)
+    // ─────────────────────────────────────────────────────────────
+    // Cupones
+    // ─────────────────────────────────────────────────────────────
+
+    public function storeCoupon(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'code' => 'required|string|unique:coupons,code',
-            'discount_type' => 'required|in:percentage,fixed',
-            'discount_value' => 'required|numeric',
-            'expires_at' => 'required|date',
-            'max_uses' => 'nullable|integer',
-        ]);
-        $coupon = Coupon::create($validated);
-        return response()->json($coupon);
+        $coupon = Coupon::create($this->validatedCouponData($request));
+
+        return response()->json($coupon, 201);
     }
 
-    public function updateCoupon(Request $request, $id)
+    public function updateCoupon(Request $request, $id): JsonResponse
     {
         $coupon = Coupon::findOrFail($id);
-        $coupon->update($request->all());
-        return response()->json($coupon);
+        $coupon->update($this->validatedCouponData($request, $coupon));
+
+        return response()->json($coupon->fresh());
     }
 
-    public function destroyCoupon($id)
+    public function destroyCoupon($id): JsonResponse
     {
-        Coupon::destroy($id);
+        Coupon::findOrFail($id)->delete();
+
         return response()->json(['success' => true]);
     }
 
-    public function validateCoupon(Request $request)
+    /**
+     * Validación pública de un cupón (checkout). Un cupón es válido durante
+     * todo el día de `expires_at`. Cualquier motivo de rechazo devuelve el
+     * mismo mensaje genérico.
+     *
+     * Nota: el incremento de `current_uses` se hace al confirmar la reserva
+     * (flujo de reservas/pagos), no aquí.
+     */
+    public function validateCoupon(Request $request): JsonResponse
     {
-        $request->validate(['code' => 'required|string']);
-        $coupon = Coupon::where('code', $request->code)->where('is_active', true)->first();
-        
-        if (!$coupon) {
-            return response()->json(['error' => 'Cupón no válido o no encontrado'], 404);
+        $validated = $request->validate(['code' => 'required|string|max:50']);
+
+        $coupon = Coupon::where('code', trim($validated['code']))->first();
+
+        if (!$coupon || !self::couponIsUsable($coupon)) {
+            return response()->json([
+                'message' => self::INVALID_COUPON_MESSAGE,
+                // Compatibilidad con el frontend actual, que lee `error`
+                'error'   => self::INVALID_COUPON_MESSAGE,
+            ], 422);
         }
-        
-        if ($coupon->expires_at < now()) {
-            return response()->json(['error' => 'El cupón ha expirado'], 400);
+
+        return response()->json([
+            'coupon' => [
+                'code'           => $coupon->code,
+                'discount_type'  => $coupon->discount_type,
+                'discount_value' => $coupon->discount_value,
+                'expires_at'     => $coupon->expires_at?->toDateString(),
+            ],
+        ]);
+    }
+
+    /**
+     * Un cupón es utilizable si está activo, no ha vencido (válido hasta el
+     * final del día de expires_at) y no alcanzó su límite de usos.
+     */
+    public static function couponIsUsable(Coupon $coupon): bool
+    {
+        if (!$coupon->is_active) {
+            return false;
         }
-        
-        if ($coupon->max_uses && $coupon->current_uses >= $coupon->max_uses) {
-            return response()->json(['error' => 'El cupón ha alcanzado su límite de uso'], 400);
+
+        if ($coupon->expires_at) {
+            $expiresEndOfDay = Carbon::parse($coupon->expires_at)->endOfDay();
+            if ($expiresEndOfDay->isPast()) {
+                return false;
+            }
         }
-        
-        return response()->json(['coupon' => $coupon]);
+
+        if ($coupon->max_uses !== null && (int) $coupon->current_uses >= (int) $coupon->max_uses) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Validadores
+    // ─────────────────────────────────────────────────────────────
+
+    private function validatedSeasonData(Request $request, ?Season $season = null): array
+    {
+        $required = $season ? 'sometimes' : 'required';
+
+        $validated = $request->validate([
+            'name'            => [$required, 'string', 'max:100'],
+            'start_date'      => [$required, 'date'],
+            'end_date'        => [$required, 'date'],
+            'rate_adjustment' => [$required, 'numeric', 'min:-100', 'max:1000'],
+            'is_active'       => ['sometimes', 'boolean'],
+            // SHE-034: tipo de habitación al que aplica (null = todos)
+            'room_type_id'    => ['sometimes', 'nullable', 'integer', 'exists:room_types,id'],
+        ]);
+
+        $start = $validated['start_date'] ?? $season?->start_date;
+        $end = $validated['end_date'] ?? $season?->end_date;
+        if ($start && $end && Carbon::parse($end)->lt(Carbon::parse($start))) {
+            abort(response()->json([
+                'message' => 'La fecha de fin debe ser igual o posterior a la fecha de inicio.',
+                'errors'  => ['end_date' => ['La fecha de fin debe ser igual o posterior a la fecha de inicio.']],
+            ], 422));
+        }
+
+        return $validated;
+    }
+
+    private function validatedCouponData(Request $request, ?Coupon $coupon = null): array
+    {
+        $required = $coupon ? 'sometimes' : 'required';
+
+        $validated = $request->validate([
+            'code'           => [$required, 'string', 'max:50', 'regex:/^[A-Za-z0-9_-]+$/', Rule::unique('coupons', 'code')->ignore($coupon?->id)],
+            'discount_type'  => [$required, 'in:percentage,fixed'],
+            'discount_value' => [$required, 'numeric', 'gt:0', 'max:100000'],
+            'expires_at'     => [$required, 'date'],
+            'max_uses'       => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'is_active'      => ['sometimes', 'boolean'],
+        ], [
+            'code.regex'         => 'El código solo puede contener letras, números, guiones y guiones bajos.',
+            'discount_value.gt'  => 'El valor del descuento debe ser mayor que 0.',
+        ]);
+
+        if (isset($validated['code'])) {
+            $validated['code'] = strtoupper($validated['code']);
+        }
+
+        $type = $validated['discount_type'] ?? $coupon?->discount_type;
+        $value = $validated['discount_value'] ?? $coupon?->discount_value;
+        if ($type === 'percentage' && $value !== null && (float) $value > 100) {
+            abort(response()->json([
+                'message' => 'Un descuento porcentual no puede superar el 100%.',
+                'errors'  => ['discount_value' => ['Un descuento porcentual no puede superar el 100%.']],
+            ], 422));
+        }
+
+        return $validated;
     }
 }

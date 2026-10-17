@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import PublicHeader from '../components/PublicHeader';
 import PublicFooter from '../components/PublicFooter';
+import { HOTEL_NAME } from '../constants/hotel';
 
 export default function Home() {
   return (
@@ -10,11 +11,11 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative h-[85vh] w-full flex items-center justify-center overflow-hidden">
         {/* Background Image */}
-        <div 
+        <div
           className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105"
-          style={{ 
-            backgroundImage: "url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=1920&q=80')", 
-            backgroundPosition: 'center 40%' 
+          style={{
+            backgroundImage: "url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=1920&q=80')",
+            backgroundPosition: 'center 40%'
           }}
         >
           {/* Overlay gradiente */}
@@ -26,13 +27,13 @@ export default function Home() {
             Un Icono de la Ciudad de los Reyes
           </span>
           <h1 className="font-serif text-5xl md:text-7xl font-bold text-white mb-6 leading-tight drop-shadow-lg">
-            Sheraton Lima Hotel <br/>
+            {HOTEL_NAME} <br/>
             <span className="text-3xl md:text-5xl italic font-light text-[#eae8e3]">& Convention Center</span>
           </h1>
           <p className="text-lg md:text-xl text-[#d1c5af] mb-10 max-w-2xl font-light drop-shadow-md">
             Descubra el punto de encuentro perfecto entre la historia fascinante del centro de Lima y el confort moderno de clase mundial.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/habitaciones"
@@ -64,9 +65,9 @@ export default function Home() {
             </p>
           </div>
           <div className="relative h-[500px]">
-            <img 
-              src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1000&q=80" 
-              alt="Sheraton Lima Fachada" 
+            <img
+              src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1000&q=80"
+              alt={`Fachada de ${HOTEL_NAME}`}
               className="absolute inset-0 w-full h-full object-cover shadow-2xl"
             />
             <div className="absolute -bottom-6 -left-6 w-48 h-48 bg-[#f5f3ee] -z-10"></div>
@@ -82,7 +83,7 @@ export default function Home() {
             <span className="font-mono text-sm text-[#c9a227] uppercase tracking-[0.2em]">Servicios Exclusivos</span>
             <h2 className="font-serif text-4xl mt-4">Comodidad sin Compromisos</h2>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             <div className="border border-[#2a3b5c] p-8 hover:bg-[#1a2b4c] transition-colors duration-300">
               <span className="material-symbols-outlined text-4xl text-[#c9a227] mb-4">restaurant</span>

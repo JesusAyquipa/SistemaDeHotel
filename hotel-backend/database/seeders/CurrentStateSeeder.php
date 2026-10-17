@@ -4,37 +4,23 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
+/**
+ * Estado base del catálogo: roles, habitaciones, cupones y temporadas.
+ * No contiene usuarios ni datos personales: las cuentas demo se crean en
+ * DatabaseSeeder a partir de variables de entorno.
+ */
 class CurrentStateSeeder extends Seeder
 {
     public function run(): void
     {
         // ── Roles ────────────────────────────────────────────
-        DB::table('roles')->upsert([
-            ['id' => 1, 'name' => 'admin',         'guard_name' => 'web', 'created_at' => '2026-09-22 08:12:55', 'updated_at' => '2026-09-22 08:12:55'],
-            ['id' => 2, 'name' => 'recepcionista',  'guard_name' => 'web', 'created_at' => '2026-09-22 08:12:55', 'updated_at' => '2026-09-22 08:12:55'],
-            ['id' => 3, 'name' => 'cliente',        'guard_name' => 'web', 'created_at' => '2026-09-22 08:12:55', 'updated_at' => '2026-09-22 08:12:55'],
-        ], ['id'], ['name', 'guard_name']);
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        foreach (['admin', 'recepcionista', 'cliente'] as $roleName) {
+            Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
+        }
         $this->command->info('Roles insertados.');
-
-        // ── Users ────────────────────────────────────────────
-        DB::table('users')->upsert([
-            ['id' => 1, 'name' => 'Administrador Principal',      'email' => 'admin@hotel.com',          'image_url' => null, 'password' => '$2y$12$0TQ3FGwEt/wAdvTY3eg3Qu5IEHnQtAQ5V9DoGuiKE3eRbgBuuAmcq', 'is_active' => 1, 'remember_token' => null, 'created_at' => '2026-09-22 08:12:56', 'updated_at' => '2026-09-22 08:12:56'],
-            ['id' => 2, 'name' => 'María García (Recepción)',     'email' => 'recepcion@hotel.com',      'image_url' => null, 'password' => '$2y$12$AREFSy9qh3AKWbgBAKcQ0e8d8e7xrYIBtSOddIrbodF4O0jlEWo6q', 'is_active' => 1, 'remember_token' => null, 'created_at' => '2026-09-22 08:12:56', 'updated_at' => '2026-09-22 08:12:56'],
-            ['id' => 3, 'name' => 'Carlos López (Inactivo)',      'email' => 'inactivo@hotel.com',       'image_url' => null, 'password' => '$2y$12$sCr4qJnnS0DlwrGn3vwU2euCMIColX2LuZv8l1.zEfBj.NbXPx7iW', 'is_active' => 0, 'remember_token' => null, 'created_at' => '2026-09-22 08:12:56', 'updated_at' => '2026-09-22 08:12:56'],
-            ['id' => 4, 'name' => 'jesus ayquipa ayquipa',        'email' => 'jesusayquipa789@gmail.com','image_url' => null, 'password' => '$2y$12$oLIMKWwD5DZUl0PGqlinHeDKvJo1S.riHp47KUzuibdulRuKO0UP6', 'is_active' => 1, 'remember_token' => null, 'created_at' => '2026-09-22 08:47:24', 'updated_at' => '2026-10-05 05:20:33'],
-        ], ['id'], ['name', 'email']);
-        $this->command->info('Usuarios insertados.');
-
-        // ── model_has_roles ──────────────────────────────────
-        DB::table('model_has_roles')->insertOrIgnore([
-            ['role_id' => 1, 'model_type' => 'App\Models\User', 'model_id' => 1],
-            ['role_id' => 2, 'model_type' => 'App\Models\User', 'model_id' => 2],
-            ['role_id' => 2, 'model_type' => 'App\Models\User', 'model_id' => 3],
-            ['role_id' => 3, 'model_type' => 'App\Models\User', 'model_id' => 4],
-        ]);
-        $this->command->info('Roles de usuario asignados.');
 
         // ── Rooms ────────────────────────────────────────────
         DB::table('rooms')->upsert([

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Folio de Cuenta - Sheraton Lima Hotel</title>
+    <title>Folio de Cuenta - {{ config('hotel.name') }}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');
         
@@ -143,8 +143,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima Hotel</h1>
-            <p>Estado de Cuenta Oficial</p>
+            <h1>{{ config('hotel.name') }}</h1>
+            <p>Estado de Cuenta Oficial &middot; RUC {{ config('hotel.ruc') }}</p>
         </div>
         
         <div class="content">
@@ -153,7 +153,7 @@
             </div>
             
             <p style="font-size: 13px; color: #4d4635; margin-bottom: 25px;">
-                Agradecemos su preferencia por elegir Sheraton Lima Hotel. A continuación, le presentamos el detalle de su cuenta correspondiente a su reciente estadía con nosotros.
+                Agradecemos su preferencia por elegir {{ config('hotel.name') }}. A continuación, le presentamos el detalle de su cuenta correspondiente a su reciente estadía con nosotros.
             </p>
 
             <div class="info-box">
@@ -193,15 +193,15 @@
 
             <div class="totals-container">
                 <div class="totals-row">
-                    <span>Subtotal</span>
+                    <span>Op. gravada (sin IGV)</span>
                     <span>S/ {{ number_format($totals['subtotal'], 2) }}</span>
                 </div>
                 <div class="totals-row">
-                    <span>IGV (18%)</span>
+                    <span>IGV incluido (18%)</span>
                     <span>S/ {{ number_format($totals['igv'], 2) }}</span>
                 </div>
                 <div class="totals-row highlight">
-                    <span>Total de la Cuenta</span>
+                    <span>Total de la Cuenta (incluye IGV)</span>
                     <span>S/ {{ number_format($totals['total'], 2) }}</span>
                 </div>
                 <div class="totals-row" style="color: #4caf50;">
@@ -220,7 +220,7 @@
         </div>
         
         <div class="footer">
-            <p style="margin: 0;">&copy; {{ date('Y') }} Sheraton Lima Hotel. TODOS LOS DERECHOS RESERVADOS.</p>
+            <p style="margin: 0;">&copy; {{ date('Y') }} {{ config('hotel.name') }}. TODOS LOS DERECHOS RESERVADOS.</p>
             <p style="margin: 5px 0 0 0; font-size: 9px; color: #a39f96;">Este es un documento informativo y no constituye un comprobante fiscal electrónico válido a menos que se indique lo contrario.</p>
         </div>
     </div>

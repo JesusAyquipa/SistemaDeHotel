@@ -9,3 +9,6 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# Scripts de shell siempre con finales de línea LF (entrypoint de Docker)
+*.sh text eol=lf

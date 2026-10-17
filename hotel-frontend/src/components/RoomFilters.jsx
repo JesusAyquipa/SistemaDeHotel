@@ -1,13 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getPublicRoomTypes } from '../services/roomTypeService';
+import logError from '../utils/logError';
 
 export default function RoomFilters({ filters, onFilterChange }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [roomTypes, setRoomTypes] = useState([]);
 
-  const bedTypes = [
-    { value: 'todos', label: 'Todas las camas' },
-    { value: 'individual', label: 'Individual' },
-    { value: 'doble', label: 'Doble' },
-    { value: 'king', label: 'King Size / Suite' },
+  // Tipos de habitación reales (SHE-034): GET /api/room-types
+  useEffect(() => {
+    const controller = new AbortController();
+    getPublicRoomTypes({ signal: controller.signal })
+      .then(setRoomTypes)
+      .catch((err) => {
+        if (err?.name !== 'CanceledError') logError('room-types:public', err);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const typeOptions = [
+    { value: 'todos', label: 'Todos los tipos' },
+    ...roomTypes.map((type) => ({ value: type.slug, label: type.name })),
   ];
 
   const capacities = [
@@ -34,6 +46,7 @@ export default function RoomFilters({ filters, onFilterChange }) {
 
   const hasActiveFilters =
     (filters.bed_type && filters.bed_type !== 'todos') ||
+    (filters.room_type && filters.room_type !== 'todos') ||
     filters.capacity ||
     filters.min_price ||
     filters.max_price ||
@@ -46,19 +59,22 @@ export default function RoomFilters({ filters, onFilterChange }) {
   };
 
   const handleReset = () => {
-    onFilterChange('bed_type', 'todos');
-    onFilterChange('capacity', '');
-    onFilterChange('min_price', '');
-    onFilterChange('max_price', '');
-    onFilterChange('search', '');
-    onFilterChange('sort_by', 'price_asc');
+    onFilterChange({
+      bed_type: 'todos',
+      room_type: 'todos',
+      capacity: '',
+      min_price: '',
+      max_price: '',
+      search: '',
+      sort_by: 'price_asc',
+    });
   };
 
   return (
     <div className="bg-[#fbf9f4] border border-[#d1c5af] p-5 shadow-[2px_2px_0px_rgba(20,33,61,0.08)] space-y-4">
       {/* Barra Superior: Filtros Rápidos, Búsqueda y Orden */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        
+
         {/* Búsqueda por palabra clave */}
         <div className="relative flex-1 min-w-[240px]">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#755b00] text-sm">
@@ -84,17 +100,18 @@ export default function RoomFilters({ filters, onFilterChange }) {
 
         {/* Filtros Principales */}
         <div className="flex flex-wrap items-center gap-3">
-          
-          {/* Tipo de Habitación / Cama */}
+
+          {/* Tipo de Habitación (catálogo real) */}
           <div className="flex items-center gap-1.5">
             <span className="material-symbols-outlined text-[#755b00] text-base">bed</span>
             <select
-              id="bed_type_filter"
-              value={filters.bed_type || 'todos'}
-              onChange={(e) => onFilterChange('bed_type', e.target.value)}
+              id="room_type_filter"
+              aria-label="Tipo de habitación"
+              value={filters.room_type || 'todos'}
+              onChange={(e) => onFilterChange('room_type', e.target.value)}
               className="bg-[#f5f3ee] border border-[#d1c5af] px-3 py-2 font-mono text-xs text-[#1b1c19] focus:border-[#14213d] outline-none cursor-pointer"
             >
-              {bedTypes.map((type) => (
+              {typeOptions.map((type) => (
                 <option key={type.value} value={type.value}>
                   {type.label}
                 </option>
@@ -198,8 +215,8 @@ export default function RoomFilters({ filters, onFilterChange }) {
 
           <div className="flex items-center gap-2 w-full md:w-auto">
             <div>
-              <label className="block font-mono text-[10px] uppercase text-[#78716c]">Min (S/)</label>
-              <input
+              <label htmlFor="rfilter-1" className="block font-mono text-[10px] uppercase text-[#78716c]">Min (S/)</label>
+              <input id="rfilter-1"
                 type="number"
                 min="0"
                 step="10"
@@ -211,8 +228,8 @@ export default function RoomFilters({ filters, onFilterChange }) {
             </div>
             <span className="text-[#78716c] mt-3">—</span>
             <div>
-              <label className="block font-mono text-[10px] uppercase text-[#78716c]">Max (S/)</label>
-              <input
+              <label htmlFor="rfilter-2" className="block font-mono text-[10px] uppercase text-[#78716c]">Max (S/)</label>
+              <input id="rfilter-2"
                 type="number"
                 min="0"
                 step="10"

@@ -3,22 +3,33 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use App\Models\Booking;
+use App\Models\CashRegisterClosure;
 use App\Models\Payment;
 use App\Models\Room;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReportController extends Controller
 {
+    /** Estados que representan ocupación real (o comprometida) de una habitación. */
+    private const OCCUPANCY_STATUSES = [
+        Booking::STATUS_CONFIRMED,
+        Booking::STATUS_CHECKED_IN,
+        Booking::STATUS_CHECKED_OUT,
+    ];
+
     /**
-     * Dashboard statistics for reports
+     * Estadísticas del dashboard de reportes.
+     * GET /api/staff/reports/dashboard
      */
     public function dashboard(Request $request): JsonResponse
     {
         $range = $request->query('dateRange', '30_days');
-        $now = Carbon::now();
+        $now = now();
 
         switch ($range) {
             case 'this_month':
@@ -26,8 +37,8 @@ class ReportController extends Controller
                 $endDate = $now->copy()->endOfMonth();
                 break;
             case 'last_month':
-                $startDate = $now->copy()->subMonth()->startOfMonth();
-                $endDate = $now->copy()->subMonth()->endOfMonth();
+                $startDate = $now->copy()->subMonthNoOverflow()->startOfMonth();
+                $endDate = $now->copy()->subMonthNoOverflow()->endOfMonth();
                 break;
             case 'ytd':
                 $startDate = $now->copy()->startOfYear();
@@ -35,161 +46,204 @@ class ReportController extends Controller
                 break;
             case '30_days':
             default:
-                $startDate = $now->copy()->subDays(30);
-                $endDate = $now->copy();
+                $range = '30_days';
+                $startDate = $now->copy()->subDays(30)->startOfDay();
+                $endDate = $now->copy()->endOfDay();
                 break;
         }
 
-        $daysInRange = $startDate->diffInDays($endDate) + 1;
-        if ($daysInRange <= 0) $daysInRange = 1;
+        $startDay = $startDate->copy()->startOfDay();
+        $endDay = $endDate->copy()->startOfDay();
+        $endExclusive = $endDay->copy()->addDay();
+        $daysInRange = max(1, (int) $startDay->diffInDays($endDay) + 1);
 
-        // 1. Gross Revenue
+        // 1. Ingresos brutos (pagos completados positivos)
         $grossRevenue = Payment::whereBetween('created_at', [$startDate, $endDate])
-                                ->where('status', 'completed')
-                                ->sum('amount');
+            ->where('status', Payment::STATUS_COMPLETED)
+            ->where('amount', '>', 0)
+            ->sum('amount');
 
-        // 2. Total Bookings
+        // 2. Reservas creadas en el periodo
         $totalBookings = Booking::whereBetween('created_at', [$startDate, $endDate])->count();
 
-        // 3. Occupancy Rate
+        // 3. Ocupación: UNA sola consulta con todas las reservas que se cruzan con el rango
+        //    (incluye las que lo abarcan completo: check_in < fin AND check_out > inicio).
         $totalRooms = Room::count();
-        $totalAvailableNights = $totalRooms * $daysInRange;
-        
-        // Sum nights of bookings that overlap with the date range
-        // For simplicity, we just count the bookings created in the range
-        // or actually calculate check_in and check_out difference.
-        $bookingsInRange = Booking::where(function($q) use ($startDate, $endDate) {
-            $q->whereBetween('check_in', [$startDate, $endDate])
-              ->orWhereBetween('check_out', [$startDate, $endDate]);
-        })->whereNotIn('status', ['cancelled'])->get();
+        $bookingsInRange = Booking::whereIn('status', self::OCCUPANCY_STATUSES)
+            ->overlapping($startDay, $endExclusive)
+            ->get(['id', 'check_in', 'check_out']);
+
+        // Mapa fecha => habitaciones ocupadas, calculado en memoria.
+        $occupiedByDay = [];
+        for ($d = $startDay->copy(); $d->lt($endExclusive); $d->addDay()) {
+            $occupiedByDay[$d->toDateString()] = 0;
+        }
 
         $occupiedNights = 0;
         foreach ($bookingsInRange as $booking) {
-            $bStart = Carbon::parse($booking->check_in);
-            $bEnd = Carbon::parse($booking->check_out);
-            
-            // Limit to the selected range
-            if ($bStart->lt($startDate)) $bStart = $startDate->copy();
-            if ($bEnd->gt($endDate)) $bEnd = $endDate->copy();
-            
-            if ($bEnd->gt($bStart)) {
-                $occupiedNights += $bStart->diffInDays($bEnd);
+            $bStart = Carbon::parse($booking->check_in)->startOfDay();
+            $bEnd = Carbon::parse($booking->check_out)->startOfDay();
+            if ($bStart->lt($startDay)) {
+                $bStart = $startDay->copy();
+            }
+            if ($bEnd->gt($endExclusive)) {
+                $bEnd = $endExclusive->copy();
+            }
+            for ($d = $bStart->copy(); $d->lt($bEnd); $d->addDay()) {
+                $key = $d->toDateString();
+                if (isset($occupiedByDay[$key])) {
+                    $occupiedByDay[$key]++;
+                    $occupiedNights++;
+                }
             }
         }
 
-        $occupancyRate = $totalAvailableNights > 0 
-            ? round(($occupiedNights / $totalAvailableNights) * 100, 1) 
+        $totalAvailableNights = $totalRooms * $daysInRange;
+        $occupancyRate = $totalAvailableNights > 0
+            ? round(($occupiedNights / $totalAvailableNights) * 100, 1)
             : 0;
 
-        // 4. Occupancy Chart Data
+        // 4. Datos del gráfico
         $chartData = [];
-        $current = $startDate->copy();
-        while ($current->lte($endDate)) {
-            $dateStr = $current->format('Y-m-d');
-            
-            // Count rooms occupied on this specific day
-            $occupiedToday = Booking::where('check_in', '<=', $dateStr)
-                                    ->where('check_out', '>', $dateStr)
-                                    ->whereNotIn('status', ['cancelled'])
-                                    ->count();
-                                    
+        foreach ($occupiedByDay as $date => $occupied) {
             $chartData[] = [
-                'date' => $current->format('d M'),
-                'occupancy' => $totalRooms > 0 ? round(($occupiedToday / $totalRooms) * 100, 1) : 0,
-                'occupied_rooms' => $occupiedToday
+                'date'           => Carbon::parse($date)->format('d M'),
+                'month'          => Carbon::parse($date)->format('M'),
+                'occupancy'      => $totalRooms > 0 ? round(($occupied / $totalRooms) * 100, 1) : 0,
+                'occupied_rooms' => $occupied,
             ];
-            $current->addDay();
         }
 
-        // Reduce chart data points if it's a large range to avoid heavy payloads
-        if (count($chartData) > 31) {
-            // Group by week or month depending on size
-            // For YTD, group by month
-            if ($range === 'ytd') {
-                $monthlyData = [];
-                foreach ($chartData as $data) {
-                    // $data['date'] is "d M", e.g., "01 Jan"
-                    $month = explode(' ', $data['date'])[1];
-                    if (!isset($monthlyData[$month])) {
-                        $monthlyData[$month] = ['count' => 0, 'sum' => 0];
-                    }
-                    $monthlyData[$month]['count']++;
-                    $monthlyData[$month]['sum'] += $data['occupancy'];
-                }
-                $chartData = [];
-                foreach ($monthlyData as $month => $stats) {
-                    $chartData[] = [
-                        'date' => $month,
-                        'occupancy' => round($stats['sum'] / $stats['count'], 1)
-                    ];
-                }
+        if ($range === 'ytd' && count($chartData) > 31) {
+            $monthly = [];
+            foreach ($chartData as $point) {
+                $monthly[$point['month']]['sum'] = ($monthly[$point['month']]['sum'] ?? 0) + $point['occupancy'];
+                $monthly[$point['month']]['count'] = ($monthly[$point['month']]['count'] ?? 0) + 1;
             }
+            $chartData = [];
+            foreach ($monthly as $month => $stats) {
+                $chartData[] = ['date' => $month, 'occupancy' => round($stats['sum'] / $stats['count'], 1)];
+            }
+        } else {
+            $chartData = array_map(function ($p) {
+                unset($p['month']);
+                return $p;
+            }, $chartData);
         }
 
-        // 5. Transactions for the table
-        $transactions = Payment::with(['booking'])
-                                ->whereBetween('created_at', [$startDate, $endDate])
-                                ->orderBy('created_at', 'desc')
-                                ->take(50)
-                                ->get()
-                                ->map(function($payment) {
-                                    return [
-                                        'id' => $payment->id,
-                                        'date' => Carbon::parse($payment->created_at)->format('d M Y'),
-                                        'staff' => 'Sistema / Online', // In a real app, this could be the logged-in staff ID if manual
-                                        'amount' => $payment->amount,
-                                        'status' => $payment->status,
-                                        'booking_code' => $payment->booking ? $payment->booking->booking_code : 'N/A'
-                                    ];
-                                });
+        // 5. Transacciones
+        $transactions = Payment::with(['booking:id,booking_code'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->orderBy('created_at', 'desc')
+            ->take(50)
+            ->get()
+            ->map(function ($payment) {
+                return [
+                    'id'           => $payment->id,
+                    'date'         => Carbon::parse($payment->created_at)->format('d M Y'),
+                    'staff'        => $payment->gateway_provider === 'manual' ? 'Recepción' : 'Sistema / Online',
+                    'amount'       => $payment->amount,
+                    'status'       => $payment->status,
+                    'booking_code' => $payment->booking ? $payment->booking->booking_code : 'N/A',
+                ];
+            });
 
         $unreconciledRevenue = Payment::where('is_reconciled', false)
-                                ->where('status', 'completed')
-                                ->sum('amount');
+            ->where('status', Payment::STATUS_COMPLETED)
+            ->where('amount', '>', 0)
+            ->sum('amount');
 
         return response()->json([
-            'occupancy_rate' => $occupancyRate,
-            'gross_revenue' => $grossRevenue,
+            'occupancy_rate'       => $occupancyRate,
+            'gross_revenue'        => $grossRevenue,
             'unreconciled_revenue' => $unreconciledRevenue,
-            'total_bookings' => $totalBookings,
-            'chart_data' => $chartData,
-            'transactions' => $transactions,
-            'startDate' => $startDate->format('Y-m-d'),
-            'endDate' => $endDate->format('Y-m-d')
+            'total_bookings'       => $totalBookings,
+            'chart_data'           => $chartData,
+            'transactions'         => $transactions,
+            'startDate'            => $startDay->format('Y-m-d'),
+            'endDate'              => $endDay->format('Y-m-d'),
         ]);
     }
 
     /**
-     * Close Register logic
+     * Cierre de caja. Los totales se calculan en el servidor a partir de los pagos
+     * completados no conciliados hasta el momento del cierre; solo esos pagos se concilian.
+     * expected_amount / difference enviados por el cliente se ignoran.
+     * POST /api/staff/reports/close-register
      */
     public function closeRegister(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'cash_amount' => 'required|numeric',
-            'voucher_amount' => 'required|numeric',
-            'expected_amount' => 'required|numeric',
-            'difference' => 'required|numeric'
+            'cash_amount'    => 'required|numeric|min:0|max:10000000',
+            'voucher_amount' => 'required|numeric|min:0|max:10000000',
+            'notes'          => 'nullable|string|max:500',
         ]);
 
-        // Marcar todos los pagos completados no conciliados como conciliados
-        Payment::where('is_reconciled', false)
-               ->where('status', 'completed')
-               ->update(['is_reconciled' => true]);
+        $user = $request->user();
+        $closedAt = now();
 
-        // Log the register close
-        \Log::info('Cierre de caja realizado', [
-            'user_id' => $request->user()->id,
-            'data' => $validated
-        ]);
+        $closure = DB::transaction(function () use ($validated, $user, $closedAt) {
+            $payments = Payment::where('is_reconciled', false)
+                ->where('status', Payment::STATUS_COMPLETED)
+                ->where('amount', '>', 0)
+                ->where('created_at', '<=', $closedAt)
+                ->lockForUpdate()
+                ->get(['id', 'amount', 'payment_method', 'created_at']);
+
+            $byMethod = [];
+            foreach ($payments as $p) {
+                $byMethod[$p->payment_method] = round(($byMethod[$p->payment_method] ?? 0) + (float) $p->amount, 2);
+            }
+
+            $cashExpected = round($payments->whereIn('payment_method', Payment::CASH_METHODS)->sum('amount'), 2);
+            $voucherExpected = round($payments->whereIn('payment_method', Payment::VOUCHER_METHODS)->sum('amount'), 2);
+            $expected = round((float) $payments->sum('amount'), 2);
+            $counted = round((float) $validated['cash_amount'] + (float) $validated['voucher_amount'], 2);
+
+            $lastClosure = CashRegisterClosure::latest('closed_at')->first();
+            $openedAt = $lastClosure?->closed_at ?? ($payments->min('created_at') ?? $closedAt);
+
+            $closure = CashRegisterClosure::create([
+                'user_id'         => $user->id,
+                'opened_at'       => $openedAt,
+                'closed_at'       => $closedAt,
+                'totals'          => [
+                    'payments_count'   => $payments->count(),
+                    'by_method'        => $byMethod,
+                    'cash_expected'    => $cashExpected,
+                    'voucher_expected' => $voucherExpected,
+                    'other_expected'   => round($expected - $cashExpected - $voucherExpected, 2),
+                    'cash_counted'     => round((float) $validated['cash_amount'], 2),
+                    'voucher_counted'  => round((float) $validated['voucher_amount'], 2),
+                ],
+                'expected_amount' => $expected,
+                'counted_amount'  => $counted,
+                'difference'      => round($counted - $expected, 2),
+                'notes'           => $validated['notes'] ?? null,
+            ]);
+
+            if ($payments->isNotEmpty()) {
+                Payment::whereIn('id', $payments->pluck('id'))
+                    ->update(['is_reconciled' => true, 'cash_register_closure_id' => $closure->id]);
+            }
+
+            return $closure;
+        });
+
+        Log::info('Cierre de caja realizado', ['user_id' => $user->id, 'closure_id' => $closure->id]);
 
         return response()->json([
-            'success' => true,
-            'message' => 'Cierre de caja registrado exitosamente.',
-            'receipt' => [
-                'date' => Carbon::now()->format('Y-m-d H:i:s'),
-                'staff' => $request->user()->name,
-                'difference' => $validated['difference']
-            ]
+            'success'  => true,
+            'message'  => 'Cierre de caja registrado exitosamente.',
+            'closure'  => $closure,
+            'receipt'  => [
+                'closure_id'      => $closure->id,
+                'date'            => $closedAt->format('Y-m-d H:i:s'),
+                'staff'           => $user->name,
+                'expected_amount' => (float) $closure->expected_amount,
+                'counted_amount'  => (float) $closure->counted_amount,
+                'difference'      => (float) $closure->difference,
+            ],
         ]);
     }
 }

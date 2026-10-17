@@ -59,7 +59,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima Hotel</h1>
+            <h1>{{ config('hotel.name') }}</h1>
             <p>Confirmación de Cancelación</p>
         </div>
         <div class="content">
@@ -76,7 +76,7 @@
                 <p><strong>Porcentaje Aplicado:</strong> {{ $refundPercentage }}%</p>
                 <p><strong>Monto a Devolver:</strong> S/ {{ number_format($refundAmount, 2) }}</p>
                 
-                @if($paymentMethod === 'Efectivo')
+                @if(in_array($paymentMethod, ['Efectivo', 'cash'], true))
                     <p style="color: #93000a; font-weight: bold;">
                         Dado que el pago se realizó en efectivo, por favor acérquese a la recepción del hotel con su documento de identidad para realizar el reembolso.
                     </p>
@@ -88,10 +88,10 @@
             </div>
 
             <p>Esperamos poder recibirlo en otra oportunidad.</p>
-            <p>Atentamente,<br>El equipo de Sheraton Lima Hotel</p>
+            <p>Atentamente,<br>El equipo de {{ config('hotel.name') }}</p>
         </div>
         <div class="footer">
-            <p>© {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
+            <p>© {{ date('Y') }} {{ config('hotel.name') }}. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

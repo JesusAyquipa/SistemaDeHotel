@@ -8,7 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class FolioMail extends Mailable
+class FolioMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -22,6 +22,8 @@ class FolioMail extends Mailable
      */
     public function __construct(Booking $booking, $charges, $payments, $totals)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->booking = $booking;
         $this->charges = $charges;
         $this->payments = $payments;
@@ -33,7 +35,7 @@ class FolioMail extends Mailable
      */
     public function build()
     {
-        return $this->subject('Folio de Cuenta - Sheraton Lima Hotel')
+        return $this->subject('Folio de Cuenta - ' . config('hotel.name'))
                     ->view('emails.bookings.folio');
     }
 }

@@ -18,9 +18,13 @@ class PaymentServiceProvider extends ServiceProvider
         $this->app->singleton(PaymentGatewayInterface::class, function ($app) {
             $gateway = config('services.payment_gateway', 'simulation');
 
+            // Sin fallback silencioso: un valor desconocido es un error de configuración.
             return match ($gateway) {
-                'stripe' => new StripePaymentService(),
-                default  => new MockPaymentService(),
+                'stripe'                => new StripePaymentService(),
+                'simulation', 'mock'    => new MockPaymentService(),
+                default => throw new \RuntimeException(
+                    "PAYMENT_GATEWAY='{$gateway}' no es válido. Valores permitidos: simulation, stripe."
+                ),
             };
         });
     }

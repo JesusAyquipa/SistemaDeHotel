@@ -5,15 +5,15 @@ export default function Experience() {
   return (
     <div className="bg-surface-dim font-body-md text-on-surface flex flex-col min-h-screen">
       <PublicHeader />
-      
+
       <main className="w-full bg-surface-dim flex-grow flex flex-col">
         {/* Hero Section */}
         <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden bg-on-secondary-fixed">
           <div className="absolute inset-0 w-full h-full">
-            <img 
-              alt="Experiencias Curadas" 
-              className="w-full h-full object-cover opacity-60 mix-blend-luminosity" 
-              src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=2070" 
+            <img
+              alt="Experiencias Curadas"
+              className="w-full h-full object-cover opacity-60 mix-blend-luminosity"
+              src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=2070"
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-on-secondary-fixed via-transparent to-transparent opacity-80"></div>
@@ -31,22 +31,22 @@ export default function Experience() {
             <div className="flex flex-col md:flex-row items-stretch gap-guest-density justify-between bg-surface border border-outline-variant p-staff-density">
               <div className="flex-1 flex flex-col sm:flex-row w-full gap-staff-density">
                 <div className="flex-1 relative group flex flex-col justify-end">
-                  <label className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Check-In</label>
-                  <input className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors" type="date" />
+                  <label htmlFor="exp-0" className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Check-In</label>
+                  <input id="exp-0"  className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors" type="date" />
                 </div>
                 <div className="hidden sm:block w-px bg-outline-variant my-2"></div>
                 <div className="flex-1 relative group flex flex-col justify-end">
-                  <label className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Check-Out</label>
-                  <input className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors" type="date" />
+                  <label htmlFor="exp-1" className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Check-Out</label>
+                  <input id="exp-1"  className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors" type="date" />
                 </div>
                 <div className="hidden sm:block w-px bg-outline-variant my-2"></div>
                 <div className="flex-1 relative group flex flex-col justify-end">
-                  <label className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Guests</label>
-                  <select className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors appearance-none">
-                    <option>1 Adult</option>
-                    <option>2 Adults</option>
-                    <option>3 Adults</option>
-                    <option>4 Adults</option>
+                  <label htmlFor="exp-2" className="absolute top-2 left-3 font-utility-sm text-utility-sm text-on-surface-variant uppercase tracking-widest transition-all group-focus-within:text-primary z-10">Huéspedes</label>
+                  <select id="exp-2"  className="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary outline-none px-3 pt-8 pb-2 font-body-md text-on-surface text-body-md transition-colors appearance-none">
+                    <option>1 Adulto</option>
+                    <option>2 Adultos</option>
+                    <option>3 Adultos</option>
+                    <option>4 Adultos</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 bottom-2 text-on-surface-variant pointer-events-none">expand_more</span>
                 </div>
@@ -67,14 +67,14 @@ export default function Experience() {
             <h2 className="font-display-md text-[32px] text-on-surface uppercase tracking-tight">Nuestros Servicios Exclusivos</h2>
             <div className="w-16 h-px bg-primary mt-guest-density"></div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-guest-density items-stretch">
             {/* Card 1: Spa & Wellness */}
             <article className="bg-surface border border-outline-variant flex flex-col group hover:shadow-md transition-shadow duration-300 h-full">
               <div className="relative w-full h-56 overflow-hidden bg-surface-container-high flex items-center justify-center flex-shrink-0">
-                <div 
-                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700" 
-                  style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDkByQeMGhbhPtLDckX9N-7TKTKk67IPof3Kvic2oVOS5JvaRnjnBvjzUXQ9QX4c9stGUyRPw1FYZLCEWhYWttDwDrriFLt_kBXxvre2rUnv7BEF85j-l7J6NYQ-GidaXe-SsYR0QsouQMPF0RbJwdb3M9WpmqjEQIUzCjYHUkuPWq59N-E34o4e43IYsuvQJrzkrsx7-eneHLDeD-EEu-EkKSDiiHspQWp3KgIzHLFuXclyyXtpLwlAQ')" }}
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                  style={{ backgroundImage: "url('/images/experience-7.jpg')" }}
                 ></div>
                 <span className="material-symbols-outlined text-[48px] text-primary relative z-10 drop-shadow-md">spa</span>
               </div>
@@ -95,9 +95,9 @@ export default function Experience() {
             {/* Card 2: Fine Dining */}
             <article className="bg-surface border border-outline-variant flex flex-col group hover:shadow-md transition-shadow duration-300 h-full">
               <div className="relative w-full h-56 overflow-hidden bg-surface-container-high flex items-center justify-center flex-shrink-0">
-                <div 
-                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700" 
-                  style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDy4-S8W2OQw_PQaOEiHtbyh6wfFEV_jAsrT0OMdEeAPKeq9ZlQiDO8SRM9th47ft53DGgJiY9shw6lLhv4rQ5nlmysuztli3Oq-eEgzn_Kgqgd8SJUflyvsdewCimeZZXpDGTi2nAqLNfyKIKZET-0hEi5t--InB_DFjViFjCsyGe7kX6xOLP9kFUXQeVQAWUSgG80LlfnCqupPpLmeubJ3RJi51hsduBY2DdmDl5gj3XnzQuEcZ4dPw')" }}
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                  style={{ backgroundImage: "url('/images/experience-8.jpg')" }}
                 ></div>
                 <span className="material-symbols-outlined text-[48px] text-primary relative z-10 drop-shadow-md">restaurant</span>
               </div>
@@ -118,9 +118,9 @@ export default function Experience() {
             {/* Card 3: Hospitality Services */}
             <article className="bg-surface border border-outline-variant flex flex-col group hover:shadow-md transition-shadow duration-300 h-full">
               <div className="relative w-full h-56 overflow-hidden bg-surface-container-high flex items-center justify-center flex-shrink-0">
-                <div 
-                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700" 
-                  style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCyA1BhCTr0vB-1c3txXnsMSrxi7EGH5LN26wMcROcZN8mI7qVHVs6mFolPC52TJ0Oka8bF_aIp6vtrXrDfAZk06EfwPIfzL4AnZh34Fx5Yry-9gdmr6teADlEIhUXN6t6oy8bkbeNp6eyGgqiytmJZlPAyLcD3RhOD-kvL0RsI003nHUFhp-KcdNvn4IrkHdJ1rbbM5baXkelN9clSOJl41pKR5UAAEy2QeNgWgYJHcniDuhWxNkEYOQ')" }}
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-80 mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                  style={{ backgroundImage: "url('/images/experience-4.jpg')" }}
                 ></div>
                 <span className="material-symbols-outlined text-[48px] text-primary relative z-10 drop-shadow-md">room_service</span>
               </div>

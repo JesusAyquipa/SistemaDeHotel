@@ -1,0 +1,54 @@
+{
+  "today": {
+    "date": "2026-10-17",
+    "arrivals": [
+      {
+        "id": 501,
+        "booking_code": "RES-E2EARR01",
+        "status": "confirmed",
+        "check_in": "2026-10-17",
+        "check_out": "2026-10-19",
+        "balance": 0,
+        "companions_count": 1,
+        "guest": { "id": 9, "name": "Lucía", "surname": "Ramírez", "is_vip": true },
+        "room": { "id": 101, "name": "Suite Presidencial Colonial", "room_number": "501" }
+      }
+    ],
+    "departures": [],
+    "in_house": [
+      {
+        "id": 502,
+        "booking_code": "RES-E2EINH02",
+        "status": "checked_in",
+        "check_in": "2026-10-15",
+        "check_out": "2026-10-18",
+        "balance": 120,
+        "companions_count": 0,
+        "guest": { "id": 10, "name": "Jorge", "surname": "Salas" },
+        "room": { "id": 102, "name": "Doble Clásica", "room_number": "302" }
+      }
+    ],
+    "no_show_candidates": [],
+    "counts": { "arrivals": 1, "departures": 0, "in_house": 1, "no_show_candidates": 0 }
+  },
+  "rack": {
+    "rooms": [
+      {
+        "id": 101,
+        "room_number": "501",
+        "name": "Suite Presidencial Colonial",
+        "status": "occupied",
+        "bookings": [
+          { "id": 502, "code": "RES-E2EINH02", "guest_name": "Jorge Salas", "check_in": "2026-10-15", "check_out": "2026-10-18", "status": "checked_in", "vip": false, "blacklisted": false }
+        ]
+      },
+      {
+        "id": 102,
+        "room_number": "302",
+        "name": "Doble Clásica",
+        "status": "available",
+        "bookings": []
+      }
+    ]
+  }
+}

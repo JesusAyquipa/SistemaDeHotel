@@ -4,19 +4,10 @@ namespace App\Services\Payment;
 
 /**
  * Implementación de la pasarela Stripe.
- * Utiliza la API de Stripe para crear PaymentIntents y verificar webhooks.
  *
- * NOTA: Esta implementación requiere el paquete stripe/stripe-php
- * y las siguientes variables de entorno:
- *   - STRIPE_SECRET_KEY
- *   - STRIPE_WEBHOOK_SECRET
- *
- * Para instalar: composer require stripe/stripe-php
- *
- * IMPORTANTE: Esta clase está preparada para producción pero actualmente
- * el sistema opera con MockPaymentService (simulador) por defecto.
- * Para activar Stripe, cambiar PAYMENT_GATEWAY=stripe en el .env
- * e instalar las dependencias correspondientes.
+ * Requiere el paquete stripe/stripe-php (composer require stripe/stripe-php) y
+ * STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET. Si el SDK no está instalado se lanza
+ * una excepción explícita: NO se hace fallback silencioso al simulador.
  */
 class StripePaymentService implements PaymentGatewayInterface
 {
@@ -25,8 +16,18 @@ class StripePaymentService implements PaymentGatewayInterface
 
     public function __construct()
     {
-        $this->secretKey = config('services.stripe.secret', '');
-        $this->webhookSecret = config('services.stripe.webhook_secret', '');
+        if (!class_exists('\Stripe\Stripe')) {
+            throw new \RuntimeException(
+                'PAYMENT_GATEWAY=stripe pero el paquete stripe/stripe-php no está instalado. Ejecuta: composer require stripe/stripe-php'
+            );
+        }
+
+        $this->secretKey = (string) config('services.stripe.secret', '');
+        $this->webhookSecret = (string) config('services.stripe.webhook_secret', '');
+
+        if ($this->secretKey === '') {
+            throw new \RuntimeException('PAYMENT_GATEWAY=stripe requiere STRIPE_SECRET_KEY configurado.');
+        }
     }
 
     /**
@@ -34,13 +35,6 @@ class StripePaymentService implements PaymentGatewayInterface
      */
     public function createPaymentIntent(float $amount, string $currency, array $metadata = []): array
     {
-        // Verificar que Stripe SDK esté disponible
-        if (!class_exists('\Stripe\Stripe')) {
-            throw new \RuntimeException(
-                'El paquete stripe/stripe-php no está instalado. Ejecuta: composer require stripe/stripe-php'
-            );
-        }
-
         \Stripe\Stripe::setApiKey($this->secretKey);
 
         $paymentIntent = \Stripe\PaymentIntent::create([
@@ -61,28 +55,39 @@ class StripePaymentService implements PaymentGatewayInterface
     }
 
     /**
+     * Stripe no permite (ni es PCI-compliant) enviar el PAN desde nuestro servidor:
+     * el cobro debe completarse en el cliente con Stripe Elements + PaymentIntent.
+     */
+    public function processPayment(
+        string $cardNumber,
+        string $expiry,
+        string $cvc,
+        float $amount,
+        string $currency,
+        array $metadata = []
+    ): array {
+        throw new \RuntimeException('El cobro directo con tarjeta no está soportado con Stripe; use PaymentIntents desde el cliente.');
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function verifyWebhookSignature(string $payload, string $signatureHeader): array
     {
-        if (!class_exists('\Stripe\Webhook')) {
-            throw new \RuntimeException('Stripe SDK no disponible para verificación de webhooks.');
+        if ($this->webhookSecret === '') {
+            throw new \RuntimeException('STRIPE_WEBHOOK_SECRET no configurado.');
         }
 
         try {
-            $event = \Stripe\Webhook::constructEvent(
-                $payload,
-                $signatureHeader,
-                $this->webhookSecret
-            );
-
-            return [
-                'type' => $event->type,
-                'data' => $event->data->object->toArray(),
-            ];
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
-            throw new \Exception('Firma de webhook de Stripe inválida: ' . $e->getMessage());
+            $event = \Stripe\Webhook::constructEvent($payload, $signatureHeader, $this->webhookSecret);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Firma de webhook de Stripe inválida.');
         }
+
+        return [
+            'type' => $event->type,
+            'data' => $event->data->object->toArray(),
+        ];
     }
 
     /**

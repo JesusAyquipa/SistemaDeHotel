@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\LogsActivity;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Charge extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $fillable = [
         'booking_id',

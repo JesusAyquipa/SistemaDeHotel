@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import Toast from '../components/Toast';
+import { HOTEL_NAME } from '../constants/hotel';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token');
   const email = searchParams.get('email');
-  
+
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export default function ResetPassword() {
 
     setLoading(true);
     setError('');
-    
+
     try {
       const res = await api.post('/reset-password', {
         token,
@@ -42,7 +43,7 @@ export default function ResetPassword() {
         password,
         password_confirmation: passwordConfirmation
       });
-      
+
       setToastMessage(res.data.message);
       setTimeout(() => {
         navigate('/login');
@@ -57,10 +58,10 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#dcdad5] p-4 relative overflow-hidden">
       <div className="w-full max-w-md bg-[#fbf9f4] shadow-2xl overflow-hidden border border-[#d1c5af] relative z-10">
-        
+
         <div className="bg-[#1b1c19] text-center py-10 px-8 border-b-[6px] border-[#c9a227] relative">
           <h1 className="font-serif text-3xl font-bold text-white tracking-widest uppercase relative z-10">
-            Sheraton Lima Hotel
+            {HOTEL_NAME}
           </h1>
           <p className="font-mono text-xs text-[#a39f96] mt-3 tracking-[0.2em] uppercase relative z-10">
             Restablecer Contraseña
@@ -95,11 +96,11 @@ export default function ResetPassword() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
+                  <label htmlFor="reset-1" className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
                     Nueva Contraseña
                   </label>
-                  <input 
-                    type="password" 
+                  <input id="reset-1"
+                    type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-white border border-[#d1c5af] text-[#2d2d2a] font-mono text-sm px-4 py-3 focus:outline-none focus:border-[#987d35] focus:ring-1 focus:ring-[#987d35] transition-all"
@@ -110,11 +111,11 @@ export default function ResetPassword() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
+                  <label htmlFor="reset-2" className="block font-mono text-xs font-bold text-[#a39f96] tracking-widest uppercase mb-2">
                     Confirmar Contraseña
                   </label>
-                  <input 
-                    type="password" 
+                  <input id="reset-2"
+                    type="password"
                     value={passwordConfirmation}
                     onChange={(e) => setPasswordConfirmation(e.target.value)}
                     className="w-full bg-white border border-[#d1c5af] text-[#2d2d2a] font-mono text-sm px-4 py-3 focus:outline-none focus:border-[#987d35] focus:ring-1 focus:ring-[#987d35] transition-all"
@@ -125,7 +126,7 @@ export default function ResetPassword() {
                 </div>
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={loading}
                 className="w-full mt-6 bg-[#c9a227] hover:bg-[#b58f1a] text-[#14213d] font-bold font-mono text-xs uppercase tracking-widest py-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-[#a68a4d] flex items-center justify-center gap-2"
@@ -137,10 +138,10 @@ export default function ResetPassword() {
         </div>
       </div>
 
-      <Toast 
-        message={toastMessage} 
-        isOpen={!!toastMessage} 
-        onClose={() => setToastMessage(null)} 
+      <Toast
+        message={toastMessage}
+        isOpen={!!toastMessage}
+        onClose={() => setToastMessage(null)}
       />
     </div>
   );

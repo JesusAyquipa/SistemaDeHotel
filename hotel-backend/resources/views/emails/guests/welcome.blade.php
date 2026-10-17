@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Bienvenido a Sheraton Lima</title>
+    <title>Bienvenido a {{ config('hotel.name') }}</title>
     <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1b1c19; background-color: #fbf9f4; margin: 0; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; border: 1px solid #d1c5af; }
@@ -17,7 +17,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima</h1>
+            <h1>{{ config('hotel.name') }}</h1>
             <p>¡Cuenta Creada Exitosamente!</p>
         </div>
         <div class="content">
@@ -33,7 +33,7 @@
             <p>¡Esperamos tenerte pronto con nosotros!</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ date('Y') }} Sheraton Lima. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} {{ config('hotel.name') }}. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

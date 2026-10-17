@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class WelcomeGuestMail extends Mailable
+class WelcomeGuestMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -21,6 +21,8 @@ class WelcomeGuestMail extends Mailable
      */
     public function __construct(User $user)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->user = $user;
     }
 
@@ -30,7 +32,7 @@ class WelcomeGuestMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: '¡Bienvenido(a) a Sheraton Lima!',
+            subject: '¡Bienvenido(a) a ' . config('hotel.name') . '!',
         );
     }
 

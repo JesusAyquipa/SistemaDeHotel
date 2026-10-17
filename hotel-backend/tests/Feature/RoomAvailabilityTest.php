@@ -39,18 +39,18 @@ class RoomAvailabilityTest extends TestCase
             'email'           => 'juan@test.com',
         ]);
 
-        // Reserva confirmada del 20 al 25 de diciembre
+        // Reserva confirmada (en +60 a +65 días)
         Booking::create([
             'guest_id'     => $guest->id,
             'room_id'      => $room->id,
-            'check_in'     => '2026-12-20',
-            'check_out'    => '2026-12-25',
+            'check_in'     => now()->addDays(60)->toDateString(),
+            'check_out'    => now()->addDays(65)->toDateString(),
             'total_amount' => 1500.00,
-            'status'       => 'confirmada',
+            'status'       => 'confirmed',
         ]);
 
         // Buscar el mismo rango: NO debe aparecer
-        $response = $this->getJson('/api/rooms/available?check_in=2026-12-20&check_out=2026-12-25');
+        $response = $this->getJson('/api/rooms/available?check_in=' . now()->addDays(60)->toDateString() . '&check_out=' . now()->addDays(65)->toDateString());
 
         $response->assertStatus(200);
         $response->assertJsonMissing(['room_number' => '101']);
@@ -81,18 +81,18 @@ class RoomAvailabilityTest extends TestCase
             'email'           => 'maria@test.com',
         ]);
 
-        // Reserva confirmada del 10 al 15 de enero
+        // Reserva confirmada (en +80 a +85 días)
         Booking::create([
             'guest_id'     => $guest->id,
             'room_id'      => $room->id,
-            'check_in'     => '2027-01-10',
-            'check_out'    => '2027-01-15',
+            'check_in'     => now()->addDays(80)->toDateString(),
+            'check_out'    => now()->addDays(85)->toDateString(),
             'total_amount' => 1000.00,
-            'status'       => 'confirmada',
+            'status'       => 'confirmed',
         ]);
 
-        // Buscar rango diferente (20 al 25 de enero): SÍ debe aparecer
-        $response = $this->getJson('/api/rooms/available?check_in=2027-01-20&check_out=2027-01-25');
+        // Buscar rango diferente (+90 a +95 días): SÍ debe aparecer
+        $response = $this->getJson('/api/rooms/available?check_in=' . now()->addDays(90)->toDateString() . '&check_out=' . now()->addDays(95)->toDateString());
 
         $response->assertStatus(200);
         $response->assertJsonFragment(['room_number' => '202']);
@@ -126,14 +126,14 @@ class RoomAvailabilityTest extends TestCase
         Booking::create([
             'guest_id'     => $guest->id,
             'room_id'      => $room->id,
-            'check_in'     => '2027-02-01',
-            'check_out'    => '2027-02-05',
+            'check_in'     => now()->addDays(100)->toDateString(),
+            'check_out'    => now()->addDays(104)->toDateString(),
             'total_amount' => 2000.00,
-            'status'       => 'cancelada',
+            'status'       => 'cancelled',
         ]);
 
         // Mismo rango: SÍ debe aparecer (la reserva está cancelada)
-        $response = $this->getJson('/api/rooms/available?check_in=2027-02-01&check_out=2027-02-05');
+        $response = $this->getJson('/api/rooms/available?check_in=' . now()->addDays(100)->toDateString() . '&check_out=' . now()->addDays(104)->toDateString());
 
         $response->assertStatus(200);
         $response->assertJsonFragment(['room_number' => '303']);
@@ -320,5 +320,49 @@ class RoomAvailabilityTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonFragment(['room_number' => '801']);
         $response->assertJsonMissing(['room_number' => '802']);
+    }
+
+    /**
+     * Una reserva pending_payment vencida (expires_at pasado) no bloquea; una vigente sí.
+     */
+    public function test_expired_pending_booking_does_not_block_but_active_pending_does(): void
+    {
+        $room = Room::create([
+            'room_number'     => '909',
+            'name'            => 'Suite Pendiente',
+            'description'     => 'Habitación para test',
+            'bed_type'        => 'king',
+            'capacity'        => 2,
+            'size_m2'         => 40,
+            'price_per_night' => 300.00,
+            'status'          => 'disponible',
+        ]);
+
+        $guest = Guest::create([
+            'name'            => 'Pedro',
+            'surname'         => 'Ramos',
+            'document_type'   => 'DNI',
+            'document_number' => '99887766',
+            'email'           => 'pedro@test.com',
+        ]);
+
+        $booking = Booking::create([
+            'guest_id'     => $guest->id,
+            'room_id'      => $room->id,
+            'check_in'     => now()->addDays(20)->toDateString(),
+            'check_out'    => now()->addDays(22)->toDateString(),
+            'total_amount' => 600.00,
+            'status'       => 'pending_payment',
+            'expires_at'   => now()->subMinute(),
+        ]);
+
+        $url = '/api/rooms/available?check_in=' . now()->addDays(20)->toDateString()
+            . '&check_out=' . now()->addDays(22)->toDateString();
+
+        $this->getJson($url)->assertStatus(200)->assertJsonFragment(['room_number' => '909']);
+
+        $booking->update(['expires_at' => now()->addMinutes(10)]);
+
+        $this->getJson($url)->assertStatus(200)->assertJsonMissing(['room_number' => '909']);
     }
 }

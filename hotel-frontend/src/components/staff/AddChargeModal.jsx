@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getProducts } from '../../services/productService';
+import formatCurrency from '../../utils/formatCurrency';
+import logError from '../../utils/logError';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
 // Mapa de tab-UI → categorías en la BD
 const CATEGORY_MAP = {
@@ -51,6 +54,9 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState('');
   const [showProductList, setShowProductList] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEscapeKey(() => { if (!submitting) onClose(); }, isOpen);
 
   // Todos los productos de la BD, cargados una sola vez al abrir el modal
   const [dbProducts, setDbProducts] = useState([]);
@@ -66,7 +72,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
           setDbLoaded(true);
         })
         .catch((err) => {
-          console.warn('No se pudo cargar catálogo de BD, usando local:', err);
+          logError('charges:products', err);
           setDbLoaded(true);
         });
     }
@@ -107,18 +113,21 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
     p.name.toLowerCase().includes(product.toLowerCase())
   );
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!product.trim() || !unitPrice) return;
+    if (!product.trim() || !unitPrice || submitting) return;
 
-    onAddCharge({
+    setSubmitting(true);
+    const ok = await onAddCharge({
       date: new Date().toISOString().split('T')[0],
       product_id: selectedProductId,
       concept: `${category} - ${product}`,
-      quantity: parseInt(quantity, 10),
+      quantity: Math.max(1, parseInt(quantity, 10) || 1),
       unitPrice: parseFloat(unitPrice),
       total,
     });
+    setSubmitting(false);
+    if (ok === false) return; // mantener el modal abierto si falló
 
     // Reset
     setCategory('Frigobar');
@@ -146,20 +155,21 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center font-sans text-[#2d2d2a]">
-      <div className="bg-white shadow-xl border border-gray-200 w-full max-w-md relative flex flex-col animate-fadeIn">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-charge-title" className="bg-white shadow-xl border border-gray-200 w-full max-w-md relative flex flex-col animate-fadeIn m-4">
         {/* Header */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-          <h2 className="font-serif text-lg font-bold">Registrar Nuevo Consumo</h2>
-          <button onClick={onClose} className="text-[#a39f96] hover:text-[#2d2d2a] transition-colors">
-            <span className="material-symbols-outlined text-lg">close</span>
+          <h2 id="add-charge-title" className="font-serif text-lg font-bold">Registrar Nuevo Consumo</h2>
+          <button type="button" onClick={onClose} className="text-[#a39f96] hover:text-[#2d2d2a] transition-colors" aria-label="Cerrar">
+            <span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
           </button>
         </div>
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Categoría</label>
+            <label htmlFor="charge-category" className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Categoría</label>
             <select
+              id="charge-category"
               value={category}
               onChange={handleCategoryChange}
               className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none cursor-pointer"
@@ -173,9 +183,11 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Producto / Servicio</label>
+            <label htmlFor="charge-product" className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Producto / Servicio</label>
             <div className="relative">
               <input
+                id="charge-product"
+                autoComplete="off"
                 type="text"
                 value={product}
                 onChange={(e) => {
@@ -202,7 +214,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
                         onClick={() => handleSelectProduct(prod)}
                       >
                         <span>{prod.name}</span>
-                        <span className="text-[#987d35]">S/ {prod.price.toFixed(2)}</span>
+                        <span className="text-[#987d35]">{formatCurrency(prod.price)}</span>
                       </div>
                     ))
                   ) : (
@@ -217,8 +229,9 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
           <div className="flex gap-4">
             <div className="flex-1 flex flex-col gap-1">
-              <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Cantidad</label>
+              <label htmlFor="charge-qty" className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Cantidad</label>
               <input
+                id="charge-qty"
                 type="number"
                 min="1"
                 value={quantity}
@@ -228,8 +241,11 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
               />
             </div>
             <div className="flex-1 flex flex-col gap-1">
-              <label className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Precio Unitario (S/)</label>
+              <label htmlFor="charge-price" className="font-mono text-[10px] uppercase font-bold text-[#78716c] tracking-widest">Precio Unitario (S/)</label>
               <input
+                id="charge-price"
+                readOnly={!!selectedProductId}
+                title={selectedProductId ? 'Precio del catálogo' : undefined}
                 type="number"
                 step="0.10"
                 min="0"
@@ -246,7 +262,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
           <div className="flex justify-between items-end mb-4">
             <span className="font-serif text-sm font-bold text-[#2d2d2a]">Total a Cargar:</span>
-            <span className="font-serif text-2xl font-bold text-[#987d35]">S/ {total.toFixed(2)}</span>
+            <span className="font-serif text-2xl font-bold text-[#987d35]">{formatCurrency(total)}</span>
           </div>
 
           {/* Footer / Buttons */}
@@ -260,9 +276,10 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
             </button>
             <button
               type="submit"
-              className="bg-[#987d35] hover:bg-[#7a642a] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 transition-colors shadow-sm"
+              disabled={submitting}
+              className="disabled:opacity-50 bg-[#987d35] hover:bg-[#7a642a] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-6 py-2.5 transition-colors shadow-sm"
             >
-              Agregar a la Cuenta
+              {submitting ? 'Agregando...' : 'Agregar a la Cuenta'}
             </button>
           </div>
         </form>

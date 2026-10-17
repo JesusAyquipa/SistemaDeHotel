@@ -1,177 +1,197 @@
-import { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { useState, useEffect, useRef, useId } from 'react';
+import { getAvailableRooms } from '../../services/rooms';
+import { createCheckoutIntent, processMockPayment } from '../../services/paymentService';
+import { createBooking, updateBooking } from '../../services/bookingService';
+import CardFields from '../CardFields';
+import GuestSearchBox from './GuestSearchBox';
+import { EMPTY_CARD, validateCard, cardPayload } from '../../utils/card';
+import { validateCoupon, couponDiscount } from '../../utils/coupon';
+import { apiErrorMessage, apiStatus } from '../../utils/apiError';
+import formatCurrency from '../../utils/formatCurrency';
+import { nightsBetween } from '../../utils/dates';
+import logError from '../../utils/logError';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
-/**
- * Formatea un número de tarjeta con espacios cada 4 dígitos.
- */
-function formatCardNumber(value) {
-  const cleaned = value.replace(/\D/g, '').slice(0, 16);
-  return cleaned.replace(/(.{4})/g, '$1 ').trim();
+const NAME_PATTERN = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$";
+const PHONE_PATTERN = "^\\+?[0-9\\s\\-]+$";
+
+let companionSeq = 0;
+const newCompanion = (data = {}) => ({
+  _key: `c${++companionSeq}`,
+  name: '',
+  surname: '',
+  document_type: 'DNI',
+  document_number: '',
+  email: '',
+  phone: '',
+  ...data,
+});
+
+// Elimina campos solo de UI antes de enviar a la API
+const cleanCompanions = (list) => list.map(({ name, surname, document_type, document_number, email, phone }) => ({
+  name: name.trim(),
+  surname: surname.trim(),
+  document_type,
+  document_number: document_number.trim(),
+  email: email?.trim() || null,
+  phone: phone?.trim() || null,
+}));
+
+function updateErrorMessage(err) {
+  const status = apiStatus(err);
+  const msg = err?.response?.data?.message;
+  if (status === 402) return `Pago rechazado: ${msg || 'la tarjeta fue declinada. No se realizaron cambios.'}`;
+  if (status === 404) return msg || 'No se encontró la reserva.';
+  if (status === 409) return msg || 'La habitación no está disponible en las fechas seleccionadas.';
+  return apiErrorMessage(err, 'Error al guardar los cambios de la reserva.');
 }
 
-/**
- * Formatea la fecha de expiración como MM/YY.
- */
-function formatExpiry(value) {
-  const cleaned = value.replace(/\D/g, '').slice(0, 4);
-  if (cleaned.length >= 3) {
-    return cleaned.slice(0, 2) + '/' + cleaned.slice(2);
-  }
-  return cleaned;
-}
+const today = () => new Date().toISOString().split('T')[0];
 
-export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }) {
-  const [checkIn, setCheckIn] = useState(booking?.checkIn || '');
-  const [checkOut, setCheckOut] = useState(booking?.checkOut || '');
-  
+/**
+ * Modal de reservas para el personal.
+ *  - booking = null  -> nueva reserva manual (walk-in / teléfono)
+ *  - booking = objeto completo de la API -> edición real vía PUT /bookings/{code}
+ */
+export default function EditBookingModal({ isOpen, onClose, onSuccess, booking = null, initialRoomId = null, initialCheckIn = '', initialCheckOut = '' }) {
+  const isEdit = !!booking;
+  const uid = useId();
+  const fid = (name) => `${uid}-${name}`;
+
+  const [checkIn, setCheckIn] = useState(isEdit ? String(booking.check_in).substring(0, 10) : (initialCheckIn || ''));
+  const [checkOut, setCheckOut] = useState(isEdit ? String(booking.check_out).substring(0, 10) : (initialCheckOut || ''));
   const [availableRooms, setAvailableRooms] = useState([]);
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState(isEdit && booking.room_id ? String(booking.room_id) : (initialRoomId ? String(initialRoomId) : ''));
 
-  const [adults, setAdults] = useState(2);
+  const [adults, setAdults] = useState(isEdit ? 1 + (booking.companions?.length || 0) : 2);
   const [children, setChildren] = useState(0);
 
-  // Datos del huésped
-  const [guestName, setGuestName] = useState('');
-  const [guestSurname, setGuestSurname] = useState('');
-  const [documentType, setDocumentType] = useState('DNI');
-  const [documentNumber, setDocumentNumber] = useState('');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
-
-  // Acompañantes
+  // Datos del huésped (solo nueva reserva)
+  const [guest, setGuest] = useState({
+    name: '', surname: '', document_type: 'DNI', document_number: '', email: '', phone: '',
+  });
   const [companions, setCompanions] = useState([]);
-  
-  // Cupones
+
+  // Cupones (solo nueva reserva)
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
 
-  // Pasarela de Pagos
+  // Pagos
   const [paymentMethod, setPaymentMethod] = useState('card');
-  const [cardData, setCardData] = useState({
-    cardNumber: '',
-    cardExpiry: '',
-    cardCvc: '',
-    cardHolder: ''
-  });
-  const [paymentResult, setPaymentResult] = useState(null);
+  const [card, setCard] = useState(EMPTY_CARD);
+  const [cardErrors, setCardErrors] = useState({});
+  const [serverRequiresPayment, setServerRequiresPayment] = useState(null); // monto informado por el backend
 
+  const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  // Reutilizar el checkout intent si se reintenta con los mismos datos
+  const intentRef = useRef({ fingerprint: null, code: null });
+  const roomsRequestRef = useRef(0);
 
+  useEscapeKey(() => { if (!loading) onClose(); }, isOpen);
+
+  // Cargar habitaciones disponibles para las fechas
   useEffect(() => {
-    if (checkIn && checkOut && !booking) {
-      const capacity = parseInt(adults || 1) + parseInt(children || 0);
-      api.get(`/rooms/available?check_in=${checkIn}&check_out=${checkOut}&capacity=${capacity}`)
-        .then(res => {
-          setAvailableRooms(res.data);
-          setRoomId(current => {
-             const stillExists = res.data.some(r => r.id.toString() === current);
-             if (!stillExists && res.data.length > 0) return res.data[0].id.toString();
-             if (res.data.length === 0) return '';
-             return current;
+    if (!isOpen || !checkIn || !checkOut || checkOut <= checkIn) return undefined;
+    const requestId = ++roomsRequestRef.current;
+    const capacity = isEdit
+      ? 1 + (booking.companions?.length || 0)
+      : (parseInt(adults, 10) || 1) + (parseInt(children, 10) || 0);
+    getAvailableRooms({ check_in: checkIn, check_out: checkOut, capacity })
+      .then((data) => {
+        if (requestId !== roomsRequestRef.current) return;
+        const list = Array.isArray(data) ? data : [];
+        setAvailableRooms(list);
+        if (!isEdit) {
+          setRoomId((current) => {
+            if (list.some((r) => String(r.id) === current)) return current;
+            return list.length > 0 ? String(list[0].id) : '';
           });
-        })
-        .catch(err => console.error(err));
+        }
+      })
+      .catch((err) => {
+        if (requestId !== roomsRequestRef.current) return;
+        logError('edit-booking:rooms', err);
+        setAvailableRooms([]);
+      });
+    return undefined;
+  }, [isOpen, isEdit, booking, checkIn, checkOut, adults, children]);
+
+  if (!isOpen) return null;
+
+  // En edición, la habitación actual siempre es una opción (aunque /rooms/available la excluya)
+  const roomOptions = (() => {
+    const list = [...availableRooms];
+    if (isEdit && booking.room && !list.some((r) => String(r.id) === String(booking.room.id))) {
+      list.unshift(booking.room);
     }
-  }, [checkIn, checkOut, booking, adults, children]);
+    return list;
+  })();
+  const selectedRoom = roomOptions.find((r) => String(r.id) === String(roomId)) || null;
+  const roomCapacity = selectedRoom?.capacity || 2;
 
-  const handleSearchGuest = async (e) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    if (query.length >= 2) {
-      try {
-        const res = await api.get(`/guests/search?query=${query}`);
-        setSearchResults(res.data);
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
-      setSearchResults([]);
-    }
-  };
+  // Cálculo de totales (los precios incluyen IGV; el backend confirma el monto final)
+  const nights = nightsBetween(checkIn, checkOut);
+  const pricePerNight = selectedRoom ? parseFloat(selectedRoom.price_per_night) : 0;
+  const subTotal = pricePerNight * nights;
+  const discountAmount = couponDiscount(appliedCoupon, subTotal);
+  const totalAmount = Math.max(0, subTotal - discountAmount);
 
-  const selectGuest = (guest) => {
-    setGuestName(guest.name);
-    setGuestSurname(guest.surname);
-    setDocumentType(guest.document_type);
-    setDocumentNumber(guest.document_number);
-    setGuestEmail(guest.email);
-    setGuestPhone(guest.phone || '');
-    setSearchQuery('');
-    setSearchResults([]);
-  };
+  const currentTotal = isEdit ? Number(booking.total_amount || 0) : 0;
+  const estimatedDifference = isEdit && selectedRoom && nights > 0 ? subTotal - currentTotal : 0;
+  const editRequiresCard = isEdit && booking.status === 'confirmed'
+    && (serverRequiresPayment !== null || estimatedDifference > 0);
 
-  // Helper para capacidades de habitaciones dinámicas
-  const getRoomCapacity = (id) => {
-    if (booking && booking.room) return booking.room.capacity;
-    const room = availableRooms.find(r => r.id.toString() === id);
-    return room ? room.capacity : 2;
+  // ===== Huésped / acompañantes =====
+  const updateGuest = (field, value) => setGuest((prev) => ({ ...prev, [field]: value }));
+
+  const selectGuest = (g) => {
+    setGuest({
+      name: g.name || '',
+      surname: g.surname || '',
+      document_type: g.document_type || 'DNI',
+      document_number: g.document_number || '',
+      email: g.email || '',
+      phone: g.phone || '',
+    });
   };
 
   const handleAddCompanion = () => {
-    const capacity = getRoomCapacity(roomId);
-    if (companions.length + 1 >= capacity) {
-      alert(`No puedes añadir más acompañantes. La capacidad máxima de esta habitación es ${capacity} persona(s).`);
+    if (companions.length + 1 >= roomCapacity) {
+      setError(`No puedes añadir más acompañantes. La capacidad máxima de esta habitación es ${roomCapacity} persona(s).`);
       return;
     }
-    setCompanions([...companions, { 
-      name: '', surname: '', document_type: 'DNI', document_number: '', email: '', phone: '', searchQuery: '', searchResults: [] 
-    }]);
+    setCompanions((prev) => [...prev, newCompanion()]);
   };
 
-  const handleSearchCompanion = async (index, query) => {
-    updateCompanion(index, 'searchQuery', query);
-    if (query.length >= 2) {
-      try {
-        const res = await api.get(`/guests/search?query=${query}`);
-        updateCompanion(index, 'searchResults', res.data);
-      } catch (err) {
-        console.error(err);
-      }
-    } else {
-      updateCompanion(index, 'searchResults', []);
-    }
+  const updateCompanion = (key, field, value) => {
+    setCompanions((prev) => prev.map((c) => (c._key === key ? { ...c, [field]: value } : c)));
   };
 
-  const selectCompanionGuest = (index, guest) => {
-    const newCompanions = [...companions];
-    newCompanions[index] = {
-      ...newCompanions[index],
-      name: guest.name,
-      surname: guest.surname,
-      document_type: guest.document_type,
-      document_number: guest.document_number,
-      email: guest.email,
-      phone: guest.phone || '',
-      searchQuery: '',
-      searchResults: []
-    };
-    setCompanions(newCompanions);
+  const selectCompanionGuest = (key, g) => {
+    setCompanions((prev) => prev.map((c) => (c._key === key ? {
+      ...c,
+      name: g.name || '',
+      surname: g.surname || '',
+      document_type: g.document_type || 'DNI',
+      document_number: g.document_number || '',
+      email: g.email || '',
+      phone: g.phone || '',
+    } : c)));
   };
 
-  const updateCompanion = (index, field, value) => {
-    const newCompanions = [...companions];
-    newCompanions[index][field] = value;
-    setCompanions(newCompanions);
-  };
-
-  const removeCompanion = (index) => {
-    const newCompanions = companions.filter((_, i) => i !== index);
-    setCompanions(newCompanions);
-  };
+  const removeCompanion = (key) => setCompanions((prev) => prev.filter((c) => c._key !== key));
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
     try {
-      const res = await api.post('/coupons/validate', { code: couponCode.trim() });
-      setAppliedCoupon(res.data.coupon);
+      setAppliedCoupon(await validateCoupon(couponCode));
       setCouponError('');
     } catch (err) {
-      setCouponError(err.response?.data?.error || 'Cupón inválido');
+      setCouponError(err.message || 'Cupón inválido');
       setAppliedCoupon(null);
     }
   };
@@ -182,93 +202,60 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
     setCouponError('');
   };
 
-  if (!isOpen) return null;
-
-  // Cálculo de totales
-  const selectedRoom = availableRooms.find(r => r.id.toString() === roomId);
-  let nights = 0;
-  if (checkIn && checkOut) {
-    const start = new Date(checkIn);
-    const end = new Date(checkOut);
-    nights = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
-  }
-  const pricePerNight = selectedRoom ? parseFloat(selectedRoom.price_per_night) : 0;
-  const subTotal = pricePerNight * nights;
-  
-  let discountAmount = 0;
-  if (appliedCoupon) {
-    if (appliedCoupon.discount_type === 'percentage') {
-      discountAmount = subTotal * (parseFloat(appliedCoupon.discount_value) / 100);
-    } else {
-      discountAmount = parseFloat(appliedCoupon.discount_value);
+  const validateCardFields = () => {
+    const errors = validateCard(card);
+    setCardErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError('Revise los datos de la tarjeta.');
+      return false;
     }
-  }
-  const totalAmount = Math.max(0, subTotal - discountAmount);
-
-  const handleCardChange = (field, value) => {
-    let val = value;
-    if (field === 'cardNumber') val = formatCardNumber(val);
-    if (field === 'cardExpiry') val = formatExpiry(val);
-    if (field === 'cardCvc') val = val.replace(/\D/g, '').slice(0, 4);
-    if (field === 'cardHolder') val = val.replace(/[0-9]/g, '');
-    setCardData(prev => ({ ...prev, [field]: val }));
+    return true;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (booking) {
-      alert('Simulación: Edición de reserva no implementada en este demo');
-      onClose();
+  // ===== Guardar edición =====
+  const submitEdit = async () => {
+    if (!checkIn || !checkOut || nights < 1) {
+      setError('La fecha de check-out debe ser posterior al check-in.');
       return;
     }
-
-    if (paymentMethod === 'card') {
-      const cleanNumber = cardData.cardNumber.replace(/\s/g, '');
-      if (!cleanNumber || cleanNumber.length < 13) {
-        setError('Ingrese un número de tarjeta válido (13-16 dígitos)');
-        return;
-      }
-      if (!cardData.cardExpiry || !/^\d{2}\/\d{2}$/.test(cardData.cardExpiry)) {
-        setError('Ingrese la fecha de expiración (MM/YY)');
-        return;
-      } else {
-        const [mm, yy] = cardData.cardExpiry.split('/');
-        const expMonth = parseInt(mm, 10);
-        const expYear = parseInt(yy, 10) + 2000;
-        const now = new Date();
-        const currYear = now.getFullYear();
-        const currMonth = now.getMonth() + 1;
-
-        if (expMonth < 1 || expMonth > 12) {
-          setError('Mes inválido (01-12)');
-          return;
-        } else if (expYear < currYear || (expYear === currYear && expMonth < currMonth)) {
-          setError('La tarjeta está vencida');
-          return;
-        }
-      }
-      if (!cardData.cardCvc || cardData.cardCvc.length < 3) {
-        setError('Ingrese el código CVC (3-4 dígitos)');
-        return;
-      }
-      
-      const holder = cardData.cardHolder.trim();
-      const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\'\s]+$/;
-      const repeatingRegex = /(.)\1{2,}/;
-      
-      if (!holder) {
-        setError('Nombre del titular es obligatorio');
-        return;
-      } else if (holder.length < 5 || !holder.includes(' ')) {
-        setError('Ingrese nombre y apellido completo en la tarjeta');
-        return;
-      } else if (!nameRegex.test(holder) || repeatingRegex.test(holder)) {
-        setError('Ingrese un nombre válido en la tarjeta');
-        return;
-      }
+    if (!roomId) {
+      setError('Seleccione una habitación.');
+      return;
     }
+    if (editRequiresCard && !validateCardFields()) return;
+
+    setLoading(true);
+    try {
+      const payload = {
+        check_in: checkIn,
+        check_out: checkOut,
+        room_id: parseInt(roomId, 10),
+        ...(editRequiresCard ? cardPayload(card) : {}),
+      };
+      const response = await updateBooking(booking.booking_code, payload);
+      if (response?.requires_payment) {
+        setServerRequiresPayment(Number(response.amount_difference) || 0);
+        setError('Se requiere cobrar la diferencia con tarjeta para confirmar la modificación.');
+        return;
+      }
+      setCard(EMPTY_CARD);
+      setResult({ type: 'edit', data: response });
+      if (onSuccess) onSuccess(response);
+    } catch (err) {
+      logError('edit-booking:update', err);
+      setError(updateErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ===== Crear nueva reserva =====
+  const submitCreate = async () => {
+    if (!roomId) {
+      setError('No hay una habitación disponible seleccionada para esas fechas.');
+      return;
+    }
+    if (paymentMethod === 'card' && !validateCardFields()) return;
 
     const expectedCompanions = (Number(adults) + Number(children)) - 1;
     if (companions.length !== expectedCompanions) {
@@ -276,155 +263,200 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
       return;
     }
 
+    const bookingPayload = {
+      room_id: parseInt(roomId, 10),
+      check_in: checkIn,
+      check_out: checkOut,
+      guest_name: guest.name.trim(),
+      guest_surname: guest.surname.trim(),
+      guest_email: guest.email.trim(),
+      document_type: guest.document_type,
+      document_number: guest.document_number.trim(),
+      guest_phone: guest.phone.trim() || undefined,
+      companions: cleanCompanions(companions),
+      notes: 'Reserva creada manualmente desde recepción',
+      coupon_code: appliedCoupon ? appliedCoupon.code : null,
+    };
+
     setLoading(true);
     try {
-      // 1. Crear intención de pago
-      const intentRes = await api.post('/payments/checkout-intent', {
-        room_id: parseInt(roomId),
-        check_in: checkIn,
-        check_out: checkOut,
-        guest_name: guestName,
-        guest_surname: guestSurname,
-        guest_email: guestEmail,
-        document_type: documentType,
-        document_number: documentNumber,
-        guest_phone: guestPhone,
-        companions: companions,
-        notes: "Reserva creada manualmente desde recepción",
-        coupon_code: appliedCoupon ? appliedCoupon.code : null,
-        payment_method: paymentMethod
-      });
-
-      const bookingCode = intentRes.data.booking_code;
-
       if (paymentMethod === 'card') {
-        // 2. Procesar pago en pasarela simulada
-        const paymentRes = await api.post('/payments/process-mock', {
-          booking_code: bookingCode,
-          card_number: cardData.cardNumber.replace(/\s/g, ''),
-          card_expiry: cardData.cardExpiry,
-          card_cvc: cardData.cardCvc,
-          card_holder: cardData.cardHolder.trim()
-        });
-        setPaymentResult(paymentRes.data);
-      } else {
-        setPaymentResult({
-          success: true,
-          booking_code: bookingCode,
-          receipt_number: intentRes.data.receipt_number,
-          payment: {
-            transaction_id: paymentMethod === 'cash_later' ? intentRes.data.ticket_code : 'CASH',
-            amount: intentRes.data.booking.total_amount,
-            method: paymentMethod
+        // 1. Intención de pago (reutilizando la reserva pendiente si los datos no cambiaron)
+        const fingerprint = JSON.stringify(bookingPayload);
+        let bookingCode = intentRef.current.fingerprint === fingerprint ? intentRef.current.code : null;
+        if (!bookingCode) {
+          const intent = await createCheckoutIntent(bookingPayload);
+          bookingCode = intent.booking_code;
+          intentRef.current = { fingerprint, code: bookingCode };
+        }
+        // 2. Cobro en la pasarela simulada
+        try {
+          const payment = await processMockPayment({ booking_code: bookingCode, ...cardPayload(card) });
+          if (!payment?.success) {
+            setError(payment?.message || 'El pago fue rechazado.');
+            return;
           }
+          setCard(EMPTY_CARD);
+          setResult({
+            type: 'create',
+            method: 'card',
+            booking_code: bookingCode,
+            receipt_number: payment.receipt_number,
+            transaction_id: payment.payment?.transaction_id,
+            amount: payment.payment?.amount ?? totalAmount,
+            discount: payment.payment?.payment_details?.discount_amount,
+            coupon: payment.payment?.payment_details?.coupon_code,
+          });
+        } catch (payErr) {
+          if ([404, 409, 410, 422].includes(apiStatus(payErr))) {
+            intentRef.current = { fingerprint: null, code: null };
+          }
+          throw payErr;
+        }
+      } else {
+        // Efectivo: reserva walk-in del personal (POST /bookings)
+        const res = await createBooking({ ...bookingPayload, payment_method: paymentMethod });
+        setResult({
+          type: 'create',
+          method: paymentMethod,
+          booking_code: res.booking_code,
+          receipt_number: res.receipt_number,
+          transaction_id: res.ticket_code,
+          amount: res.summary?.total_amount ?? res.summary?.total ?? res.booking?.total_amount ?? totalAmount,
         });
       }
-
       if (onSuccess) onSuccess();
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Error al procesar el cobro o reserva en la pasarela.');
+      logError('edit-booking:create', err);
+      setError(apiErrorMessage(err, 'Error al procesar el cobro o la reserva.'));
     } finally {
       setLoading(false);
     }
   };
 
-  if (paymentResult) {
+  const handleSubmit = (e) => {
+    e?.preventDefault();
+    setError('');
+    if (isEdit) submitEdit();
+    else submitCreate();
+  };
+
+  const inputClass = 'w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]';
+  const labelClass = 'font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest';
+
+  // ===== Resultado =====
+  if (result) {
+    const isCashLater = result.method === 'cash_later';
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1b1c19]/80 backdrop-blur-sm p-4">
-        <div className="bg-[#fbf9f4] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-[#d1c5af]">
+        <div role="dialog" aria-modal="true" aria-labelledby={fid('result-title')} className="bg-[#fbf9f4] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-[#d1c5af]">
           <div className="flex justify-between items-center p-6 border-b border-[#d1c5af] bg-[#f5f3ee]">
-            <h2 className="font-serif text-2xl font-bold text-[#14213d] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#755b00]">receipt_long</span>
-              Comprobante de Pago
+            <h2 id={fid('result-title')} className="font-serif text-2xl font-bold text-[#14213d] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">receipt_long</span>
+              {result.type === 'edit' ? 'Reserva Modificada' : 'Comprobante de Reserva'}
             </h2>
-            <button onClick={onClose} className="text-[#4d4635] hover:text-[#ba1a1a] transition-colors">
-              <span className="material-symbols-outlined">close</span>
+            <button type="button" onClick={onClose} className="text-[#4d4635] hover:text-[#ba1a1a] transition-colors" aria-label="Cerrar">
+              <span className="material-symbols-outlined" aria-hidden="true">close</span>
             </button>
           </div>
 
           <div className="overflow-y-auto p-6 space-y-6">
             <div className="text-center py-4">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#c9a227]/20 border-2 border-[#c9a227] mb-4">
-                <span className="material-symbols-outlined text-4xl text-[#c9a227]">check_circle</span>
+                <span className="material-symbols-outlined text-4xl text-[#c9a227]" aria-hidden="true">check_circle</span>
               </div>
-              <h3 className="font-serif text-2xl font-bold text-[#14213d] mb-1">
-                {paymentResult.payment?.method === 'cash_later' ? '¡Reserva Registrada!' : '¡Pago Confirmado!'}
-              </h3>
-              <p className="font-sans text-sm text-[#4d4635]">
-                {paymentResult.payment?.method === 'cash_later'
-                  ? 'La reserva manual ha sido creada y está a la espera del pago en recepción.'
-                  : `La reserva manual ha sido creada y cobrada exitosamente ${paymentResult.payment?.method === 'cash' ? 'en efectivo' : 'con tarjeta'}.`
-                }
-              </p>
+              {result.type === 'edit' ? (
+                <>
+                  <h3 className="font-serif text-2xl font-bold text-[#14213d] mb-1">¡Cambios Guardados!</h3>
+                  <p className="font-sans text-sm text-[#4d4635]">{result.data?.message || 'La reserva fue modificada.'}</p>
+                </>
+              ) : (
+                <>
+                  <h3 className="font-serif text-2xl font-bold text-[#14213d] mb-1">
+                    {isCashLater ? '¡Reserva Registrada!' : '¡Pago Confirmado!'}
+                  </h3>
+                  <p className="font-sans text-sm text-[#4d4635]">
+                    {isCashLater
+                      ? 'La reserva manual fue creada y el pago quedará pendiente en recepción.'
+                      : `La reserva manual fue creada y cobrada exitosamente ${result.method === 'cash' ? 'en efectivo' : 'con tarjeta'}.`}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="bg-[#f5f3ee] border-2 border-dashed border-[#c9a227] p-5 text-center">
               <span className="font-mono text-[11px] uppercase font-bold text-[#755b00] tracking-widest block mb-1">
                 Código Único de Reserva
               </span>
-              <div className="font-mono text-2xl sm:text-3xl font-extrabold text-[#14213d] tracking-wider">
-                {paymentResult.booking_code}
+              <div className="font-mono text-2xl sm:text-3xl font-extrabold text-[#14213d] tracking-wider break-all">
+                {result.type === 'edit' ? booking.booking_code : result.booking_code}
               </div>
             </div>
 
-            <div className="bg-[#f5f3ee] border border-[#d1c5af] p-5 space-y-3">
-              <h4 className="font-mono text-xs uppercase font-bold text-[#14213d] tracking-wider flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-sm text-[#755b00]">receipt</span>
-                Detalles del Comprobante
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs text-[#4d4635]">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">N° Comprobante</span>
-                  <span className="font-bold text-[#1b1c19]">{paymentResult.receipt_number || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">ID Transacción / Medio</span>
-                  <span className="font-bold text-[#1b1c19] text-[10px] break-all">
-                    {paymentResult.payment?.method === 'cash' 
-                      ? 'EFECTIVO (CAJA)' 
-                      : (paymentResult.payment?.method === 'cash_later' ? paymentResult.payment?.transaction_id : paymentResult.payment?.transaction_id || '—')}
-                  </span>
-                </div>
-                {paymentResult.payment?.payment_details?.discount_amount > 0 && (
+            {result.type === 'create' && (
+              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-5 space-y-3">
+                <h4 className="font-mono text-xs uppercase font-bold text-[#14213d] tracking-wider flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm text-[#755b00]" aria-hidden="true">receipt</span>
+                  Detalles del Comprobante
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs text-[#4d4635]">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">Descuento ({paymentResult.payment.payment_details.coupon_code})</span>
-                    <span className="font-bold text-[#ba1a1a] text-sm">
-                      - S/ {Number(paymentResult.payment.payment_details.discount_amount).toFixed(2)}
+                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">N° Comprobante</span>
+                    <span className="font-bold text-[#1b1c19]">{result.receipt_number || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">ID Transacción / Ticket</span>
+                    <span className="font-bold text-[#1b1c19] text-[10px] break-all">
+                      {result.method === 'cash' ? 'EFECTIVO (CAJA)' : (result.transaction_id || '—')}
                     </span>
                   </div>
-                )}
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Total Cobrado</span>
-                  <span className="font-bold text-[#14213d] text-sm">
-                    S/ {Number(paymentResult.payment?.amount || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">Fecha</span>
-                  <span className="font-bold text-[#1b1c19]">
-                    {new Date().toLocaleString()}
-                  </span>
+                  {Number(result.discount) > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#78716c] block">Descuento ({result.coupon})</span>
+                      <span className="font-bold text-[#ba1a1a] text-sm">- {formatCurrency(result.discount)}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">{isCashLater ? 'Monto Pendiente' : 'Monto Total Cobrado'}</span>
+                    <span className="font-bold text-[#14213d] text-sm">{formatCurrency(result.amount)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[#78716c] block">Fecha</span>
+                    <span className="font-bold text-[#1b1c19]">{new Date().toLocaleString('es-PE')}</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {result.type === 'edit' && result.data?.payment && (
+              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-5 font-mono text-xs text-[#4d4635] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">N° Comprobante</span>
+                  <span className="font-bold text-[#1b1c19]">{result.data.payment.receipt_number || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#78716c] block">Diferencia Cobrada</span>
+                  <span className="font-bold text-[#14213d] text-sm">{formatCurrency(result.data.payment.amount)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="p-6 border-t border-[#d1c5af] flex justify-end gap-4 bg-[#f5f3ee]">
-            <button 
-              type="button" 
+          <div className="p-6 border-t border-[#d1c5af] flex flex-col sm:flex-row justify-end gap-4 bg-[#f5f3ee]">
+            <button
+              type="button"
               onClick={() => window.print()}
-              className="px-6 py-2 border border-[#14213D] text-[#14213D] font-mono text-xs font-semibold uppercase tracking-widest hover:bg-[#eae8e3] transition-colors flex items-center gap-2"
+              className="px-6 py-2 border border-[#14213D] text-[#14213D] font-mono text-xs font-semibold uppercase tracking-widest hover:bg-[#eae8e3] transition-colors flex items-center justify-center gap-2"
             >
-              <span className="material-symbols-outlined text-sm">print</span>
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">print</span>
               Imprimir
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={onClose}
               className="bg-[#755b00] hover:bg-[#c9a227] text-white font-mono text-xs font-semibold px-6 py-2 uppercase tracking-widest transition-colors shadow-sm"
             >
-              CERRAR
+              Cerrar
             </button>
           </div>
         </div>
@@ -434,267 +466,259 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#14213d]/60 backdrop-blur-sm font-sans p-4 sm:p-6">
-      <div className="bg-[#fbf9f4] w-full max-w-2xl max-h-[95vh] shadow-2xl relative flex flex-col">
+      <div role="dialog" aria-modal="true" aria-labelledby={fid('title')} className="bg-[#fbf9f4] w-full max-w-2xl max-h-[95vh] shadow-2xl relative flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#d1c5af]">
-          <h2 className="font-serif text-2xl font-bold text-[#1b1c19]">
-            {booking ? 'Editar Reserva' : 'Nueva Reserva Manual'}
+          <h2 id={fid('title')} className="font-serif text-2xl font-bold text-[#1b1c19]">
+            {isEdit ? `Editar Reserva ${booking.booking_code}` : 'Nueva Reserva Manual'}
           </h2>
-          <button 
-            onClick={onClose}
-            className="text-[#4d4635] hover:text-[#1b1c19] transition-colors"
-          >
-            <span className="material-symbols-outlined">close</span>
+          <button type="button" onClick={onClose} className="text-[#4d4635] hover:text-[#1b1c19] transition-colors" aria-label="Cerrar">
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8">
-          
+        <form id={fid('form')} onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-8">
           {error && (
-            <div className="bg-[#ba1a1a]/10 text-[#ba1a1a] p-4 border border-[#ba1a1a]/20 font-mono text-sm">
+            <div role="alert" className="bg-[#ba1a1a]/10 text-[#ba1a1a] p-4 border border-[#ba1a1a]/20 font-mono text-sm">
               {error}
             </div>
           )}
-          
-          {/* Section 1 */}
+
+          {isEdit && (
+            <div className="bg-[#eae8e3] border border-[#d1c5af] p-4 font-mono text-xs text-[#4d4635] grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <p><strong>Huésped:</strong> {booking.guest ? `${booking.guest.name} ${booking.guest.surname}` : '—'}</p>
+              <p><strong>Total actual:</strong> {formatCurrency(currentTotal)}</p>
+              {booking.companions?.length > 0 && (
+                <p className="sm:col-span-2">
+                  <strong>Acompañantes:</strong> {booking.companions.map((c) => `${c.name} ${c.surname}`).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Sección 1 */}
           <div className="space-y-4">
             <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#755b00]">calendar_month</span>
-              1. Fechas y Ocupación
+              <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">calendar_month</span>
+              1. Fechas{isEdit ? '' : ' y Ocupación'}
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">
-                  CHECK-IN
-                </label>
-                <div className="relative">
-                  <input 
-                    type="date" 
-                    value={checkIn}
-                    min={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setCheckIn(e.target.value)}
-                    className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans appearance-none"
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">
-                  CHECK-OUT
-                </label>
-                <div className="relative">
-                  <input 
-                    type="date" 
-                    value={checkOut}
-                    min={checkIn || new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                    className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans appearance-none"
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">
-                  ADULTOS
-                </label>
-                <input 
-                  type="number" 
-                  min="1"
-                  value={adults}
-                  onChange={(e) => setAdults(e.target.value)}
-                  className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans text-center"
+                <label htmlFor={fid('in')} className={labelClass}>Check-in</label>
+                <input
+                  id={fid('in')}
+                  type="date"
+                  required
+                  value={checkIn}
+                  min={isEdit ? undefined : today()}
+                  onChange={(e) => { setCheckIn(e.target.value); setServerRequiresPayment(null); }}
+                  className={`${inputClass} font-sans appearance-none`}
                 />
               </div>
               <div className="flex flex-col gap-2">
-                <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">
-                  NIÑOS
-                </label>
-                <input 
-                  type="number" 
-                  min="0"
-                  value={children}
-                  onChange={(e) => setChildren(e.target.value)}
-                  className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans text-center"
+                <label htmlFor={fid('out')} className={labelClass}>Check-out</label>
+                <input
+                  id={fid('out')}
+                  type="date"
+                  required
+                  value={checkOut}
+                  min={checkIn || today()}
+                  onChange={(e) => { setCheckOut(e.target.value); setServerRequiresPayment(null); }}
+                  className={`${inputClass} font-sans appearance-none`}
                 />
               </div>
             </div>
+
+            {!isEdit && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor={fid('adults')} className={labelClass}>Adultos</label>
+                  <input id={fid('adults')} type="number" min="1" value={adults} onChange={(e) => setAdults(e.target.value)} className={`${inputClass} font-sans text-center`} />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label htmlFor={fid('children')} className={labelClass}>Niños</label>
+                  <input id={fid('children')} type="number" min="0" value={children} onChange={(e) => setChildren(e.target.value)} className={`${inputClass} font-sans text-center`} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Section 2 */}
+          {/* Sección 2 */}
           <div className="space-y-4">
             <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#755b00]">bed</span>
+              <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">bed</span>
               2. Asignación de Habitación
             </h3>
-            
             <div className="flex flex-col gap-2">
-              <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">
-                TIPO DE HABITACIÓN / DISPONIBLE
-              </label>
+              <label htmlFor={fid('room')} className={labelClass}>Habitación disponible</label>
               <div className="relative">
-                <select 
+                <select
+                  id={fid('room')}
                   value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                  disabled={availableRooms.length === 0}
-                  className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 pr-8 text-[#1b1c19] font-sans appearance-none cursor-pointer disabled:opacity-50"
+                  onChange={(e) => { setRoomId(e.target.value); setServerRequiresPayment(null); }}
+                  disabled={roomOptions.length === 0}
+                  className={`${inputClass} pr-8 font-sans appearance-none cursor-pointer disabled:opacity-50`}
                 >
-                  {availableRooms.length === 0 ? (
-                    <option value="">No hay habitaciones disponibles</option>
+                  {roomOptions.length === 0 ? (
+                    <option value="">{checkIn && checkOut ? 'No hay habitaciones disponibles' : 'Seleccione las fechas primero'}</option>
                   ) : (
-                    availableRooms.map(room => (
-                      <option key={room.id} value={room.id}>
-                        Habitación {room.room_number} - {room.name} (S/ {room.price_per_night})
+                    roomOptions.map((room) => (
+                      <option key={room.id} value={String(room.id)}>
+                        Habitación {room.room_number} - {room.name} ({formatCurrency(room.price_per_night)}/noche)
+                        {isEdit && String(room.id) === String(booking.room_id) ? ' — actual' : ''}
                       </option>
                     ))
                   )}
                 </select>
-                <span className="material-symbols-outlined absolute right-0 top-1/2 -translate-y-1/2 text-[#1b1c19] pointer-events-none">
-                  expand_more
-                </span>
+                <span className="material-symbols-outlined absolute right-0 top-1/2 -translate-y-1/2 text-[#1b1c19] pointer-events-none" aria-hidden="true">expand_more</span>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Datos del Huésped (Solo para nuevas reservas) */}
-          {!booking && (
+          {/* Edición: resumen de diferencia y cobro */}
+          {isEdit && (
+            <div className="space-y-4">
+              <div className="bg-[#14213d] text-[#fbf9f4] p-4 font-mono text-sm border border-[#14213d] shadow-sm space-y-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[#d1c5af] text-xs">Nuevo total estimado ({nights} {nights === 1 ? 'noche' : 'noches'})</span>
+                  <span>{formatCurrency(subTotal)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-[#d1c5af]/30 font-bold">
+                  <span className="text-[#c9a227]">Diferencia</span>
+                  <span className="text-[#c9a227]">
+                    {formatCurrency(serverRequiresPayment ?? estimatedDifference)}
+                  </span>
+                </div>
+              </div>
+              {booking.status === 'confirmed' && estimatedDifference < 0 && serverRequiresPayment === null && (
+                <p className="bg-[#e8f5e9] border border-[#4caf50] text-[#1b5e20] p-3 font-mono text-xs">
+                  Se registrará un reembolso pendiente según la política de reembolsos.
+                </p>
+              )}
+              {booking.status === 'pending_payment' && (
+                <p className="bg-[#fff3e0] border border-[#ff9800] text-[#e65100] p-3 font-mono text-xs">
+                  La reserva aún no está pagada: el nuevo total se cobrará al registrar el pago.
+                </p>
+              )}
+              {editRequiresCard && (
+                <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 space-y-3">
+                  <p className="font-mono text-xs text-[#4d4635]">
+                    La modificación incrementa el total. Ingrese la tarjeta del huésped para cobrar la diferencia.
+                  </p>
+                  <CardFields
+                    card={card}
+                    errors={cardErrors}
+                    disabled={loading}
+                    onChange={(next, name) => {
+                      setCard(next);
+                      if (cardErrors[name]) setCardErrors((prev) => ({ ...prev, [name]: null }));
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sección 3: Datos del huésped (solo nueva reserva) */}
+          {!isEdit && (
             <div className="space-y-6">
               <div className="space-y-4">
                 <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#755b00]">person</span>
+                  <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">person</span>
                   3. Datos del Huésped Principal
                 </h3>
-                
-                {/* Buscador de Huésped */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Buscar huésped existente por DNI, Nombre o Apellido..."
-                    value={searchQuery}
-                    onChange={handleSearchGuest}
-                    className="w-full bg-[#eae8e3] border border-[#d1c5af] p-3 text-sm focus:outline-none focus:border-[#14213D] mb-2"
-                  />
-                  {searchResults.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 bg-[#fbf9f4] border border-[#d1c5af] max-h-48 overflow-y-auto z-10 shadow-lg">
-                      {searchResults.map(guest => (
-                        <div
-                          key={guest.id}
-                          className="p-3 hover:bg-[#eae8e3] cursor-pointer border-b border-[#d1c5af]/50"
-                          onClick={() => selectGuest(guest)}
-                        >
-                          <div className="font-semibold text-[#1b1c19]">{guest.name} {guest.surname}</div>
-                          <div className="text-xs text-[#4d4635]">{guest.document_type}: {guest.document_number} | {guest.email}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
+
+                <GuestSearchBox
+                  onSelect={selectGuest}
+                  placeholder="Buscar huésped existente por DNI, Nombre o Apellido..."
+                />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Nombre</label>
-                    <input type="text" required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" title="Solo letras" value={guestName} onChange={e => setGuestName(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]" />
+                    <label htmlFor={fid('g-name')} className={labelClass}>Nombre</label>
+                    <input id={fid('g-name')} type="text" required pattern={NAME_PATTERN} title="Solo letras" value={guest.name} onChange={(e) => updateGuest('name', e.target.value)} className={inputClass} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Apellidos</label>
-                    <input type="text" required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" title="Solo letras" value={guestSurname} onChange={e => setGuestSurname(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]" />
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Tipo de Documento</label>
-                    <div className="relative">
-                      <select value={documentType} onChange={e => setDocumentType(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 pr-8 text-[#1b1c19] appearance-none cursor-pointer">
-                        <option value="DNI">DNI</option>
-                        <option value="Pasaporte">Pasaporte</option>
-                        <option value="Carnet Extranjería">Carnet Extranjería</option>
-                      </select>
-                      <span className="material-symbols-outlined absolute right-0 top-1/2 -translate-y-1/2 text-[#1b1c19] pointer-events-none">expand_more</span>
-                    </div>
+                    <label htmlFor={fid('g-surname')} className={labelClass}>Apellidos</label>
+                    <input id={fid('g-surname')} type="text" required pattern={NAME_PATTERN} title="Solo letras" value={guest.surname} onChange={(e) => updateGuest('surname', e.target.value)} className={inputClass} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Nº Documento</label>
-                    <input type="text" required pattern={documentType === 'DNI' ? "^[0-9]{8}$" : ".*"} title={documentType === 'DNI' ? "DNI debe tener 8 dígitos numéricos" : "Número de documento"} value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]" />
+                    <label htmlFor={fid('g-doctype')} className={labelClass}>Tipo de Documento</label>
+                    <select id={fid('g-doctype')} value={guest.document_type} onChange={(e) => updateGuest('document_type', e.target.value)} className={`${inputClass} pr-8 appearance-none cursor-pointer`}>
+                      <option value="DNI">DNI</option>
+                      <option value="Pasaporte">Pasaporte</option>
+                      <option value="Carnet Extranjería">Carnet Extranjería</option>
+                    </select>
                   </div>
-
                   <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Correo Electrónico</label>
-                    <input type="email" required value={guestEmail} onChange={e => setGuestEmail(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]" />
+                    <label htmlFor={fid('g-docnum')} className={labelClass}>Nº Documento</label>
+                    <input id={fid('g-docnum')} type="text" required pattern={guest.document_type === 'DNI' ? '^[0-9]{8}$' : '.*'} title={guest.document_type === 'DNI' ? 'DNI debe tener 8 dígitos numéricos' : 'Número de documento'} value={guest.document_number} onChange={(e) => updateGuest('document_number', e.target.value)} className={inputClass} />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[10px] font-medium text-[#4d4635] uppercase tracking-widest">Teléfono (Opcional)</label>
-                    <input type="tel" pattern="^\+?[0-9\s\-]+$" title="Solo números" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19]" />
+                    <label htmlFor={fid('g-email')} className={labelClass}>Correo Electrónico</label>
+                    <input id={fid('g-email')} type="email" required value={guest.email} onChange={(e) => updateGuest('email', e.target.value)} className={inputClass} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor={fid('g-phone')} className={labelClass}>Teléfono (Opcional)</label>
+                    <input id={fid('g-phone')} type="tel" pattern={PHONE_PATTERN} title="Solo números" value={guest.phone} onChange={(e) => updateGuest('phone', e.target.value)} className={inputClass} />
                   </div>
                 </div>
               </div>
 
-              {/* Acompañantes */}
               {companions.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-[#d1c5af]/50">
                   <h4 className="font-serif text-md font-semibold text-[#1b1c19]">Acompañantes</h4>
                   {companions.map((companion, idx) => (
-                    <div key={idx} className="bg-[#f5f3ee] p-4 relative border border-[#d1c5af]/30">
-                      <button 
-                        type="button" 
-                        onClick={() => removeCompanion(idx)}
+                    <div key={companion._key} className="bg-[#f5f3ee] p-4 relative border border-[#d1c5af]/30">
+                      <button
+                        type="button"
+                        onClick={() => removeCompanion(companion._key)}
+                        aria-label={`Quitar acompañante ${idx + 1}`}
                         className="absolute top-2 right-2 text-[#ba1a1a] hover:bg-[#ba1a1a]/10 p-1 rounded-full transition-colors z-20"
                       >
-                        <span className="material-symbols-outlined text-sm">close</span>
+                        <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>
                       </button>
 
-                      <div className="relative mb-4 mt-2">
-                        <input
-                          type="text"
+                      <div className="mb-4 mt-2 pr-8">
+                        <GuestSearchBox
+                          compact
+                          label={`Buscar acompañante ${idx + 1}`}
                           placeholder="Buscar acompañante existente..."
-                          value={companion.searchQuery || ''}
-                          onChange={(e) => handleSearchCompanion(idx, e.target.value)}
-                          className="w-full bg-[#eae8e3] border border-[#d1c5af] p-2 text-xs focus:outline-none focus:border-[#14213D]"
+                          onSelect={(g) => selectCompanionGuest(companion._key, g)}
                         />
-                        {companion.searchResults?.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 bg-[#fbf9f4] border border-[#d1c5af] max-h-40 overflow-y-auto z-10 shadow-lg">
-                            {companion.searchResults.map(guest => (
-                              <div
-                                key={guest.id}
-                                className="p-2 hover:bg-[#eae8e3] cursor-pointer border-b border-[#d1c5af]/50"
-                                onClick={() => selectCompanionGuest(idx, guest)}
-                              >
-                                <div className="font-semibold text-[#1b1c19] text-xs">{guest.name} {guest.surname}</div>
-                                <div className="text-[10px] text-[#4d4635]">{guest.document_type}: {guest.document_number}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          ['name', 'Nombre', 'text', NAME_PATTERN, true],
+                          ['surname', 'Apellidos', 'text', NAME_PATTERN, true],
+                        ].map(([field, label, type, pattern, required]) => (
+                          <div key={field} className="flex flex-col gap-1">
+                            <label htmlFor={fid(`${companion._key}-${field}`)} className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">{label}</label>
+                            <input id={fid(`${companion._key}-${field}`)} type={type} required={required} pattern={pattern} title="Solo letras" value={companion[field]} onChange={(e) => updateCompanion(companion._key, field, e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
+                          </div>
+                        ))}
                         <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Nombre</label>
-                          <input type="text" required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" title="Solo letras" value={companion.name} onChange={e => updateCompanion(idx, 'name', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Apellidos</label>
-                          <input type="text" required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" title="Solo letras" value={companion.surname} onChange={e => updateCompanion(idx, 'surname', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Tipo de Doc</label>
-                          <select value={companion.document_type} onChange={e => updateCompanion(idx, 'document_type', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm cursor-pointer">
+                          <label htmlFor={fid(`${companion._key}-doctype`)} className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Tipo de Doc</label>
+                          <select id={fid(`${companion._key}-doctype`)} value={companion.document_type} onChange={(e) => updateCompanion(companion._key, 'document_type', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm cursor-pointer">
                             <option value="DNI">DNI</option>
                             <option value="Pasaporte">Pasaporte</option>
                             <option value="Carnet Extranjería">Carnet Extranjería</option>
                           </select>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Nº Documento</label>
-                          <input type="text" required pattern={companion.document_type === 'DNI' ? "^[0-9]{8}$" : ".*"} title={companion.document_type === 'DNI' ? "DNI de 8 dígitos numéricos" : ""} value={companion.document_number} onChange={e => updateCompanion(idx, 'document_number', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
+                          <label htmlFor={fid(`${companion._key}-docnum`)} className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Nº Documento</label>
+                          <input id={fid(`${companion._key}-docnum`)} type="text" required pattern={companion.document_type === 'DNI' ? '^[0-9]{8}$' : '.*'} title={companion.document_type === 'DNI' ? 'DNI de 8 dígitos numéricos' : ''} value={companion.document_number} onChange={(e) => updateCompanion(companion._key, 'document_number', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Correo Electrónico (Opcional)</label>
-                          <input type="email" value={companion.email || ''} onChange={e => updateCompanion(idx, 'email', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
+                          <label htmlFor={fid(`${companion._key}-email`)} className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Correo Electrónico (Opcional)</label>
+                          <input id={fid(`${companion._key}-email`)} type="email" value={companion.email} onChange={(e) => updateCompanion(companion._key, 'email', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Teléfono (Opcional)</label>
-                          <input type="tel" pattern="^\+?[0-9\s\-]+$" title="Solo números" value={companion.phone || ''} onChange={e => updateCompanion(idx, 'phone', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
+                          <label htmlFor={fid(`${companion._key}-phone`)} className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Teléfono (Opcional)</label>
+                          <input id={fid(`${companion._key}-phone`)} type="tel" pattern={PHONE_PATTERN} title="Solo números" value={companion.phone} onChange={(e) => updateCompanion(companion._key, 'phone', e.target.value)} className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm" />
                         </div>
                       </div>
                     </div>
@@ -702,155 +726,148 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking }
                 </div>
               )}
 
-              {companions.length + 1 < getRoomCapacity(roomId) && (
-                <button 
-                  type="button" 
+              {companions.length + 1 < roomCapacity && (
+                <button
+                  type="button"
                   onClick={handleAddCompanion}
                   className="text-[#755b00] font-mono text-xs font-semibold uppercase tracking-widest flex items-center gap-1 hover:text-[#c9a227] transition-colors"
                 >
-                  <span className="material-symbols-outlined text-sm">person_add</span>
+                  <span className="material-symbols-outlined text-sm" aria-hidden="true">person_add</span>
                   Añadir Acompañante
                 </button>
               )}
             </div>
           )}
 
-          {/* Cupones (Solo para nuevas reservas) */}
-          {!booking && (
+          {/* Cupones (solo nueva reserva) */}
+          {!isEdit && (
             <div className="space-y-4">
               <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#755b00]">sell</span>
+                <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">sell</span>
                 4. Cupón de Descuento (Opcional)
               </h3>
-              
               <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4">
-                 {!appliedCoupon ? (
-                   <div>
-                     <div className="flex gap-2">
-                       <input 
-                         type="text" 
-                         placeholder="Ingresa el código" 
-                         value={couponCode}
-                         onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                         className="w-full bg-transparent border-b-2 border-[#d1c5af] focus:border-[#14213D] outline-none py-2 text-[#1b1c19] font-sans uppercase"
-                       />
-                       <button 
-                         type="button"
-                         onClick={handleApplyCoupon}
-                         className="bg-[#14213d] hover:bg-[#0a1128] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors"
-                       >
-                         Aplicar
-                       </button>
-                     </div>
-                     {couponError && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{couponError}</p>}
-                   </div>
-                 ) : (
-                   <div className="flex items-center justify-between bg-[#e5efff] border border-[#0047b3] p-2">
-                     <div className="flex items-center gap-2">
-                       <span className="material-symbols-outlined text-[#0047b3] text-sm">check_circle</span>
-                       <span className="font-mono text-xs font-bold text-[#0047b3]">{appliedCoupon.code} aplicado</span>
-                     </div>
-                     <button type="button" onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]">
-                       <span className="material-symbols-outlined text-sm">delete</span>
-                     </button>
-                   </div>
-                 )}
+                {!appliedCoupon ? (
+                  <div>
+                    <div className="flex gap-2">
+                      <label htmlFor={fid('coupon')} className="sr-only">Código de cupón</label>
+                      <input
+                        id={fid('coupon')}
+                        type="text"
+                        placeholder="Ingresa el código"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        className={`${inputClass} font-sans uppercase`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyCoupon}
+                        className="bg-[#14213d] hover:bg-[#0a1128] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                    {couponError && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{couponError}</p>}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-[#e5efff] border border-[#0047b3] p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[#0047b3] text-sm" aria-hidden="true">check_circle</span>
+                      <span className="font-mono text-xs font-bold text-[#0047b3]">{appliedCoupon.code} aplicado</span>
+                    </div>
+                    <button type="button" onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]" aria-label="Quitar cupón">
+                      <span className="material-symbols-outlined text-sm" aria-hidden="true">delete</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Pasarela de Pagos */}
-          {!booking && (
+          {/* Pago (solo nueva reserva) */}
+          {!isEdit && (
             <div className="space-y-4">
               <h3 className="font-serif text-lg font-semibold text-[#1b1c19] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#755b00]">payments</span>
+                <span className="material-symbols-outlined text-[#755b00]" aria-hidden="true">payments</span>
                 5. Método de Pago
               </h3>
 
-              {/* Resumen de Cobro */}
               <div className="bg-[#14213d] text-[#fbf9f4] p-4 font-mono text-sm border border-[#14213d] shadow-sm">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[#d1c5af] text-xs">Subtotal ({nights} noches)</span>
-                  <span>S/ {subTotal.toFixed(2)}</span>
+                  <span className="text-[#d1c5af] text-xs">Subtotal ({nights} {nights === 1 ? 'noche' : 'noches'})</span>
+                  <span>{formatCurrency(subTotal)}</span>
                 </div>
                 {discountAmount > 0 && (
                   <div className="flex justify-between items-center mb-1 text-[#e67e22]">
                     <span className="text-xs">Descuento ({appliedCoupon.code})</span>
-                    <span>- S/ {discountAmount.toFixed(2)}</span>
+                    <span>- {formatCurrency(discountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-[#d1c5af]/30 font-bold text-lg">
                   <span className="text-[#c9a227]">TOTAL A COBRAR</span>
-                  <span className="text-[#c9a227]">S/ {totalAmount.toFixed(2)}</span>
+                  <span className="text-[#c9a227]">{formatCurrency(totalAmount)}</span>
                 </div>
-              </div>
-              
-              <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 flex flex-col sm:flex-row flex-wrap gap-4">
-                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
-                  <input type="radio" name="payment_method" value="card" checked={paymentMethod === 'card'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
-                  Tarjeta
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
-                  <input type="radio" name="payment_method" value="cash" checked={paymentMethod === 'cash'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
-                  Efectivo (Caja / Presencial)
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
-                  <input type="radio" name="payment_method" value="cash_later" checked={paymentMethod === 'cash_later'} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
-                  Efectivo (Pago Pendiente)
-                </label>
+                <p className="text-[10px] text-[#d1c5af] mt-1">Precios con IGV incluido.</p>
               </div>
 
+              <fieldset className="bg-[#f5f3ee] border border-[#d1c5af] p-4 flex flex-col sm:flex-row flex-wrap gap-4">
+                <legend className="sr-only">Método de pago</legend>
+                {[
+                  ['card', 'Tarjeta'],
+                  ['cash', 'Efectivo (Caja / Presencial)'],
+                  ['cash_later', 'Efectivo (Pago Pendiente)'],
+                ].map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2 cursor-pointer font-mono text-xs font-bold uppercase text-[#1b1c19]">
+                    <input type="radio" name={fid('payment_method')} value={value} checked={paymentMethod === value} onChange={(e) => setPaymentMethod(e.target.value)} className="accent-[#14213D] w-4 h-4" />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+
               {paymentMethod === 'card' ? (
-                <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1 md:col-span-2">
-                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Número de Tarjeta</label>
-                    <input type="text" value={cardData.cardNumber} onChange={(e) => handleCardChange('cardNumber', e.target.value)} maxLength={19} placeholder="4242 4242 4242 4242" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Fecha Exp (MM/YY)</label>
-                    <input type="text" value={cardData.cardExpiry} onChange={(e) => handleCardChange('cardExpiry', e.target.value)} maxLength={5} placeholder="MM/YY" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">CVC</label>
-                    <input type="password" value={cardData.cardCvc} onChange={(e) => handleCardChange('cardCvc', e.target.value)} maxLength={4} placeholder="•••" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm tracking-wider" />
-                  </div>
-                  <div className="flex flex-col gap-1 md:col-span-2">
-                    <label className="font-mono text-[9px] font-medium text-[#4d4635] uppercase">Titular de la Tarjeta</label>
-                    <input type="text" value={cardData.cardHolder} onChange={(e) => handleCardChange('cardHolder', e.target.value)} placeholder="NOMBRE DEL TITULAR" className="w-full bg-transparent border-b border-[#d1c5af] focus:border-[#14213D] outline-none py-1 text-[#1b1c19] text-sm uppercase" />
-                  </div>
+                <div className="bg-[#f5f3ee] border border-[#d1c5af] p-4">
+                  <CardFields
+                    card={card}
+                    errors={cardErrors}
+                    disabled={loading}
+                    onChange={(next, name) => {
+                      setCard(next);
+                      if (cardErrors[name]) setCardErrors((prev) => ({ ...prev, [name]: null }));
+                    }}
+                  />
                 </div>
               ) : paymentMethod === 'cash' ? (
                 <div className="bg-[#e8f4fd] border border-[#7cb9e8]/50 p-4 flex items-center gap-3 font-mono text-sm text-[#1a5276]">
-                  <span className="material-symbols-outlined text-[#2980b9]">storefront</span>
-                  <p>Al confirmar, la reserva se creará y el pago en efectivo se marcará como Completado en caja inmediatamente.</p>
+                  <span className="material-symbols-outlined text-[#2980b9]" aria-hidden="true">storefront</span>
+                  <p>Al confirmar, la reserva se creará y el pago en efectivo se registrará en caja inmediatamente.</p>
                 </div>
               ) : (
                 <div className="bg-[#fff3cd] border border-[#ffeeba] p-4 flex items-center gap-3 font-mono text-sm text-[#856404]">
-                  <span className="material-symbols-outlined text-[#856404]">pending_actions</span>
-                  <p>Se generará un ticket para que el huésped pague en efectivo al llegar (Reserva por Teléfono / WhatsApp). La habitación quedará en estado de Pago Pendiente.</p>
+                  <span className="material-symbols-outlined text-[#856404]" aria-hidden="true">pending_actions</span>
+                  <p>La reserva quedará confirmada con saldo pendiente para pagar en recepción (reserva por teléfono / WhatsApp).</p>
                 </div>
               )}
             </div>
           )}
-
         </form>
 
         {/* Footer */}
-        <div className="p-6 border-t border-[#d1c5af] flex justify-end gap-4 bg-[#f5f3ee]">
-          <button 
-            type="button" 
+        <div className="p-4 sm:p-6 border-t border-[#d1c5af] flex flex-col-reverse sm:flex-row justify-end gap-4 bg-[#f5f3ee]">
+          <button
+            type="button"
             onClick={onClose}
-            className="px-6 py-2 border border-[#14213D] text-[#14213D] font-mono text-xs font-semibold uppercase tracking-widest hover:bg-[#eae8e3] transition-colors"
+            disabled={loading}
+            className="px-6 py-2 border border-[#14213D] text-[#14213D] font-mono text-xs font-semibold uppercase tracking-widest hover:bg-[#eae8e3] transition-colors disabled:opacity-50"
           >
-            CANCELAR
+            Cancelar
           </button>
-          <button 
-            type="submit" 
-            onClick={handleSubmit}
+          <button
+            type="submit"
+            form={fid('form')}
             disabled={loading}
             className="bg-[#755b00] hover:bg-[#c9a227] disabled:opacity-50 text-white font-mono text-xs font-semibold px-6 py-2 uppercase tracking-widest transition-colors shadow-sm"
           >
-            {loading ? 'PROCESANDO...' : (booking ? 'GUARDAR CAMBIOS' : 'CREAR RESERVA')}
+            {loading ? 'Procesando...' : (isEdit ? (editRequiresCard ? 'Cobrar y Guardar' : 'Guardar Cambios') : 'Crear Reserva')}
           </button>
         </div>
       </div>

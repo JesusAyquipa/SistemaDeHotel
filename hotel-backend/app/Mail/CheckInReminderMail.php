@@ -10,18 +10,24 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class CheckInReminderMail extends Mailable
+class CheckInReminderMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
     public $booking;
+
+    /** Enlace al pre check-in online del portal del cliente (SHE-036). */
+    public string $preCheckInUrl;
 
     /**
      * Create a new message instance.
      */
     public function __construct(Booking $booking)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->booking = $booking;
+        $this->preCheckInUrl = config('app.frontend_url') . '/cliente/mis-reservas/' . rawurlencode((string) $booking->booking_code) . '#pre-check-in';
     }
 
     /**
@@ -30,7 +36,7 @@ class CheckInReminderMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Recordatorio de Check-in - Sheraton Lima Hotel',
+            subject: 'Recordatorio de Check-in - ' . config('hotel.name'),
         );
     }
 

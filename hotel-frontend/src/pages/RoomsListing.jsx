@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PublicHeader from '../components/PublicHeader';
@@ -9,6 +9,20 @@ import RoomCard from '../components/RoomCard';
 import CheckoutModal from '../components/CheckoutModal';
 import PaymentReceiptModal from '../components/PaymentReceiptModal';
 import { getAvailableRooms } from '../services/rooms';
+import { HOTEL_NAME } from '../constants/hotel';
+import logError from '../utils/logError';
+import { apiErrorMessage } from '../utils/apiError';
+
+const DEFAULT_SEARCH = { check_in: '', check_out: '', capacity: '1' };
+const DEFAULT_FILTERS = {
+  bed_type: 'todos',
+  room_type: 'todos',
+  capacity: '',
+  min_price: '',
+  max_price: '',
+  sort_by: 'price_asc',
+  search: '',
+};
 
 export default function RoomsListing() {
   const { user } = useAuth();
@@ -21,27 +35,18 @@ export default function RoomsListing() {
 
   // Estados para el flujo de reserva y checkout
   const [selectedRoomForBooking, setSelectedRoomForBooking] = useState(null);
-  const [activeReceiptBookingCode, setActiveReceiptBookingCode] = useState(null);
+  const [activeReceipt, setActiveReceipt] = useState(null); // { code, email }
 
   // Parámetros de búsqueda por fechas y huéspedes
-  const [searchParams, setSearchParams] = useState({
-    check_in: '',
-    check_out: '',
-    capacity: '1',
-  });
+  const [searchParams, setSearchParams] = useState(DEFAULT_SEARCH);
 
   // Filtros visuales adicionales
-  const [filters, setFilters] = useState({
-    bed_type: 'todos',
-    capacity: '',
-    min_price: '',
-    max_price: '',
-    sort_by: 'price_asc',
-    search: '',
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const requestIdRef = useRef(0);
 
   // Función para consultar la API con los parámetros activos
   const fetchRooms = useCallback(async (currentSearch, currentFilters) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -49,6 +54,7 @@ export default function RoomsListing() {
         check_in: currentSearch.check_in,
         check_out: currentSearch.check_out,
         bed_type: currentFilters.bed_type !== 'todos' ? currentFilters.bed_type : undefined,
+        room_type: currentFilters.room_type !== 'todos' ? currentFilters.room_type : undefined,
         capacity: currentFilters.capacity || currentSearch.capacity || undefined,
         min_price: currentFilters.min_price || undefined,
         max_price: currentFilters.max_price || undefined,
@@ -57,20 +63,21 @@ export default function RoomsListing() {
       };
 
       const data = await getAvailableRooms(query);
+      if (requestId !== requestIdRef.current) return; // respuesta obsoleta
       setRooms(data);
     } catch (err) {
-      console.error('Error fetching rooms:', err);
-      const apiMsg = err.response?.data?.message || 'No se pudo cargar el catálogo de habitaciones. Verifica tu conexión.';
-      setError(apiMsg);
+      if (requestId !== requestIdRef.current) return;
+      logError('rooms:available', err);
+      setError(apiErrorMessage(err, 'No se pudo cargar el catálogo de habitaciones. Verifica tu conexión.'));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   // Al montar el componente, cargar todas las habitaciones disponibles por defecto
   useEffect(() => {
-    fetchRooms(searchParams, filters);
-  }, []);
+    fetchRooms(DEFAULT_SEARCH, DEFAULT_FILTERS);
+  }, [fetchRooms]);
 
   // Handler cuando se ejecuta la búsqueda de disponibilidad
   const handleSearch = (newSearch) => {
@@ -79,10 +86,11 @@ export default function RoomsListing() {
   };
 
   // Handler cuando cambian los filtros visuales
+  // Acepta (clave, valor) o un objeto con varios cambios (p. ej. "Limpiar filtros")
   const handleFilterChange = (key, value) => {
     const updatedFilters = {
       ...filters,
-      [key]: value,
+      ...(typeof key === 'object' ? key : { [key]: value }),
     };
     setFilters(updatedFilters);
     fetchRooms(searchParams, updatedFilters);
@@ -107,7 +115,7 @@ export default function RoomsListing() {
 
             <div className="relative z-10 text-center bg-[#fbf9f4]/95 p-6 sm:p-10 border border-[#d1c5af] shadow-[2px_2px_0px_rgba(20,33,61,0.15)] max-w-xl mx-auto backdrop-blur-xs">
               <span className="font-mono text-xs text-[#755b00] uppercase tracking-widest block mb-2 font-bold">
-                Sheraton Lima • Catálogo Exclusivo
+                {HOTEL_NAME} • Catálogo Exclusivo
               </span>
               <h1 className="font-serif text-2xl sm:text-4xl font-bold text-[#1b1c19] mb-3">
                 Un Legado de Confort.
@@ -157,9 +165,10 @@ export default function RoomsListing() {
             {/* Estado de Error */}
             {error && (
               <div className="bg-[#ffdad6] border border-[#ba1a1a]/40 p-6 rounded-xs text-[#93000a] my-8 text-center font-mono text-sm shadow-sm">
-                <span className="material-symbols-outlined text-3xl mb-2 block">error</span>
+                <span className="material-symbols-outlined text-3xl mb-2 block" aria-hidden="true">error</span>
                 <p className="font-bold">{error}</p>
                 <button
+                  type="button"
                   onClick={() => fetchRooms(searchParams, filters)}
                   className="mt-4 px-4 py-2 bg-[#ba1a1a] text-white rounded-xs uppercase text-xs font-bold hover:bg-[#93000a] transition-colors"
                 >
@@ -222,18 +231,9 @@ export default function RoomsListing() {
                 <button
                   type="button"
                   onClick={() => {
-                    const defaultSearch = { check_in: '', check_out: '', capacity: '1' };
-                    const defaultFilters = {
-                      bed_type: 'todos',
-                      capacity: '',
-                      min_price: '',
-                      max_price: '',
-                      sort_by: 'price_asc',
-                      search: '',
-                    };
-                    setSearchParams(defaultSearch);
-                    setFilters(defaultFilters);
-                    fetchRooms(defaultSearch, defaultFilters);
+                    setSearchParams(DEFAULT_SEARCH);
+                    setFilters(DEFAULT_FILTERS);
+                    fetchRooms(DEFAULT_SEARCH, DEFAULT_FILTERS);
                   }}
                   className="bg-[#c9a227] text-[#14213d] font-mono text-xs uppercase px-6 py-3 font-bold hover:brightness-105 transition-all shadow-sm cursor-pointer"
                 >
@@ -260,7 +260,7 @@ export default function RoomsListing() {
             const code = result?.booking_code || result?.booking?.booking_code;
             setSelectedRoomForBooking(null);
             if (code) {
-              setActiveReceiptBookingCode(code);
+              setActiveReceipt({ code, email: result?.guest_email || null });
             }
             // Recargar catálogo para refrescar disponibilidades
             fetchRooms(searchParams, filters);
@@ -269,10 +269,11 @@ export default function RoomsListing() {
       )}
 
       {/* Modal de Comprobante Digital de Pago (Voucher / Recibo Imprimible) */}
-      {activeReceiptBookingCode && (
+      {activeReceipt && (
         <PaymentReceiptModal
-          bookingCode={activeReceiptBookingCode}
-          onClose={() => setActiveReceiptBookingCode(null)}
+          bookingCode={activeReceipt.code}
+          guestEmail={activeReceipt.email}
+          onClose={() => setActiveReceipt(null)}
         />
       )}
     </div>

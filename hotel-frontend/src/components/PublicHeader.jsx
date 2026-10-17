@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ProfileModal from './ProfileModal';
+import { HOTEL_NAME } from '../constants/hotel';
 
 export default function PublicHeader() {
   const { user, logout } = useAuth();
@@ -13,10 +14,10 @@ export default function PublicHeader() {
         {/* Logo */}
         <Link to="/" className="no-underline group">
           <div className="font-serif text-xl sm:text-2xl font-bold text-[#755b00] tracking-tight group-hover:text-[#4b3a00] transition-colors">
-            Sheraton Lima
+            {HOTEL_NAME}
           </div>
           <span className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider block">
-            Hotel Sheraton
+            Sistema de Gestión Hotelera
           </span>
         </Link>
 
@@ -53,22 +54,25 @@ export default function PublicHeader() {
             </Link>
           ) : (
             <div className="relative">
-              <button 
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={dropdownOpen}
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="text-[#4d4635] font-mono text-xs uppercase tracking-wider hover:text-[#755b00] flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-[14px]">person</span> {user.name}
                 <span className="material-symbols-outlined text-[14px]">{dropdownOpen ? 'expand_less' : 'expand_more'}</span>
               </button>
-              
+
               {dropdownOpen && (
                 <div className="absolute right-0 top-full mt-4 w-48 bg-[#fbf9f4] border border-[#d1c5af] shadow-[2px_2px_0px_rgba(20,33,61,0.15)] z-50 flex flex-col">
                   <div className="p-3 border-b border-[#d1c5af]">
                     <p className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider mb-1">Cuenta</p>
                     <p className="font-serif font-bold text-sm text-[#1b1c19] truncate">{user.name} {user.surname}</p>
                   </div>
-                  
-                  <button 
+
+                  <button
                     onClick={() => { setDropdownOpen(false); setIsProfileModalOpen(true); }}
                     className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
                   >
@@ -77,9 +81,9 @@ export default function PublicHeader() {
                   </button>
 
                   {/* Link al panel de administración si tiene rol de staff o admin */}
-                  {user.roles && (user.roles.includes('admin') || user.roles.includes('staff') || user.roles.includes('recepcionista') || !user.roles.includes('cliente')) && (
-                    <Link 
-                      to={user.roles.includes('admin') ? "/admin/habitaciones" : "/recepcionista/habitaciones"}
+                  {user.roles && (user.roles.includes('admin') || user.roles.includes('recepcionista')) && (
+                    <Link
+                      to={user.roles.includes('admin') ? "/admin/reservas" : "/recepcionista/reservas"}
                       onClick={() => setDropdownOpen(false)}
                       className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
                     >
@@ -89,7 +93,7 @@ export default function PublicHeader() {
                   )}
 
                   {user.roles && user.roles.includes('cliente') && (
-                    <Link 
+                    <Link
                       to="/cliente/mis-reservas"
                       onClick={() => setDropdownOpen(false)}
                       className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#14213d] hover:bg-[#eae8e3] transition-colors flex items-center gap-2 border-b border-[#d1c5af]"
@@ -99,7 +103,7 @@ export default function PublicHeader() {
                     </Link>
                   )}
 
-                  <button 
+                  <button
                     onClick={() => { logout(); setDropdownOpen(false); }}
                     className="w-full text-left px-4 py-3 text-xs font-mono uppercase font-bold text-[#ba1a1a] hover:bg-[#ffdad6]/40 transition-colors flex items-center gap-2 cursor-pointer"
                   >
@@ -120,10 +124,12 @@ export default function PublicHeader() {
         </div>
       </div>
       {/* Modal de Perfil */}
-      <ProfileModal 
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
+      {isProfileModalOpen && (
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+        />
+      )}
     </header>
   );
 }

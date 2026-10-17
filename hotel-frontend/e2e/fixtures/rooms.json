@@ -1,0 +1,34 @@
+[
+  {
+    "id": 101,
+    "name": "Suite Presidencial Colonial",
+    "room_number": "501",
+    "bed_type": "king",
+    "type": "suite",
+    "room_type": { "id": 1, "name": "Suite", "slug": "suite" },
+    "capacity": 2,
+    "size_m2": 48,
+    "price_per_night": 520,
+    "description": "Suite con vista a la Plaza San Martín, sala de estar y baño de mármol.",
+    "image_url": null,
+    "images": [],
+    "reviews_count": 2,
+    "rating_avg": 4.5
+  },
+  {
+    "id": 102,
+    "name": "Doble Clásica",
+    "room_number": "302",
+    "bed_type": "doble",
+    "type": "doble",
+    "room_type": { "id": 2, "name": "Doble", "slug": "doble" },
+    "capacity": 2,
+    "size_m2": 28,
+    "price_per_night": 240,
+    "description": "Habitación clásica con dos camas y escritorio de trabajo.",
+    "image_url": null,
+    "images": [],
+    "reviews_count": 0,
+    "rating_avg": null
+  }
+]

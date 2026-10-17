@@ -1,63 +1,63 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api'; // uses the existing axios instance
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import api, { getStoredToken, setStoredToken } from '../services/api';
+import logError from '../utils/logError';
 
-export const AuthContext = createContext();
+// eslint-disable-next-line react/only-export-components
+export const AuthContext = createContext(null);
 
-export const useAuth = () => useContext(AuthContext);
+// eslint-disable-next-line react/only-export-components
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('auth_token') || null);
-  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(() => getStoredToken());
+  const [loading, setLoading] = useState(() => !!getStoredToken());
 
-  // Attach token to requests if available
+  const clearSession = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setStoredToken(null);
+  }, []);
+
   useEffect(() => {
-    const interceptor = api.interceptors.request.use((config) => {
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    });
-
-    return () => api.interceptors.request.eject(interceptor);
-  }, [token]);
-
-  const fetchUser = async () => {
     if (!token) {
       setLoading(false);
-      return;
+      return undefined;
     }
-    try {
-      const response = await api.get('/me');
-      setUser(response.data.user);
-    } catch (error) {
-      console.error('Failed to fetch user', error);
-      setToken(null);
-      setUser(null);
-      localStorage.removeItem('auth_token');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+    let cancelled = false;
+    setLoading(true);
+    api.get('/me')
+      .then((response) => {
+        if (!cancelled) setUser(response.data.user);
+      })
+      .catch((error) => {
+        logError('auth:me', error);
+        if (!cancelled) clearSession();
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [token, clearSession]);
 
   const login = async (credentials) => {
     try {
       const response = await api.post('/login', credentials);
       const { access_token, user: userData } = response.data;
-      
-      setToken(access_token);
+      setStoredToken(access_token);
       setUser(userData);
-      localStorage.setItem('auth_token', access_token);
+      setToken(access_token);
       return { success: true, user: userData };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.errors?.email?.[0] || error.response?.data?.message || 'Error de autenticación'
+        error: error.response?.data?.errors?.email?.[0] || error.response?.data?.message || 'Error de autenticación',
       };
     }
   };
@@ -66,15 +66,14 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post('/register', credentials);
       const { access_token, user: userData } = response.data;
-      
-      setToken(access_token);
+      setStoredToken(access_token);
       setUser(userData);
-      localStorage.setItem('auth_token', access_token);
+      setToken(access_token);
       return { success: true, user: userData };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Error de registro'
+        error: error.response?.data?.message || 'Error de registro',
       };
     }
   };
@@ -84,12 +83,10 @@ export const AuthProvider = ({ children }) => {
       try {
         await api.post('/logout');
       } catch (e) {
-        console.error(e);
+        logError('auth:logout', e);
       }
     }
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('auth_token');
+    clearSession();
   };
 
   const updateProfile = async (formData) => {
@@ -102,7 +99,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Error al actualizar perfil'
+        error: error.response?.data?.message || 'Error al actualizar perfil',
+        errors: error.response?.data?.errors || null,
       };
     }
   };

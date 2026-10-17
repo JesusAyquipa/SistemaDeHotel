@@ -20,10 +20,26 @@ interface PaymentGatewayInterface
     public function createPaymentIntent(float $amount, string $currency, array $metadata = []): array;
 
     /**
+     * Cobra directamente con datos de tarjeta en el servidor.
+     * Nunca debe registrar ni devolver el número completo ni el CVC.
+     *
+     * @return array ['success' => bool, 'transaction_id' => string, 'provider' => string,
+     *                'decline_reason' => ?string, 'message' => ?string, 'payment_details' => array(brand,last4,...)]
+     */
+    public function processPayment(
+        string $cardNumber,
+        string $expiry,
+        string $cvc,
+        float $amount,
+        string $currency,
+        array $metadata = []
+    ): array;
+
+    /**
      * Verifica la firma de un webhook recibido de la pasarela.
      *
-     * @param string $payload       Body raw del request
-     * @param string $signatureHeader Valor del header de firma (ej: Stripe-Signature)
+     * @param string $payload         Body raw del request
+     * @param string $signatureHeader Valor del header de firma
      * @return array Evento parseado y validado
      * @throws \Exception Si la firma no es válida
      */

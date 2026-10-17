@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { HOTEL_NAME } from '../constants/hotel';
 
 export default function PublicFooter() {
   return (
@@ -6,10 +7,10 @@ export default function PublicFooter() {
       <div className="max-w-[1200px] mx-auto py-10 sm:py-12 px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="mb-4 md:mb-0">
           <div className="font-serif text-xl font-bold text-[#755b00] tracking-tight mb-1">
-            Sheraton Lima
+            {HOTEL_NAME}
           </div>
           <div className="font-mono text-[10px] text-[#4d4635] uppercase tracking-wider">
-            Hotel Sheraton • Sistema de Gestión Hotelera
+            Sistema de Gestión Hotelera
           </div>
         </div>
 
@@ -31,7 +32,7 @@ export default function PublicFooter() {
         </div>
 
         <div className="font-mono text-xs text-[#4d4635] text-center md:text-right">
-          © {new Date().getFullYear()} Sheraton Lima Hospitality
+          © {new Date().getFullYear()} {HOTEL_NAME}
         </div>
       </div>
     </footer>

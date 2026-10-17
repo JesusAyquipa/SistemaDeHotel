@@ -1,100 +1,25 @@
-import { useState, useCallback, useEffect } from 'react';
-import api from '../services/api';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createCheckoutIntent, processMockPayment } from '../services/paymentService';
 import { getRoomBookedDates } from '../services/rooms';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
-// Imágenes por defecto si no vienen en la habitación
-const DEFAULT_IMAGES = {
-  individual: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
-  doble: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800&q=80',
-  king: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-  default: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
-};
-
-/**
- * Formatea un número de tarjeta con espacios cada 4 dígitos.
- */
-function formatCardNumber(value) {
-  const cleaned = value.replace(/\D/g, '').slice(0, 16);
-  return cleaned.replace(/(.{4})/g, '$1 ').trim();
-}
-
-/**
- * Formatea la fecha de expiración como MM/YY.
- */
-function formatExpiry(value) {
-  const cleaned = value.replace(/\D/g, '').slice(0, 4);
-  if (cleaned.length >= 3) {
-    return cleaned.slice(0, 2) + '/' + cleaned.slice(2);
-  }
-  return cleaned;
-}
-
-/**
- * Detecta la marca de la tarjeta basándose en el BIN (primeros dígitos).
- */
-function detectCardBrand(number) {
-  const cleaned = number.replace(/\D/g, '');
-  if (/^4/.test(cleaned)) return 'visa';
-  if (/^5[1-5]/.test(cleaned) || /^2[2-7]/.test(cleaned)) return 'mastercard';
-  if (/^3[47]/.test(cleaned)) return 'amex';
-  return null;
-}
-
-/**
- * Detecta el banco emisor (Perú) basándose en algunos BINs comunes.
- */
-function detectCardBank(number) {
-  const cleaned = number.replace(/\D/g, '');
-  if (cleaned.length < 4) return null;
-  
-  if (/^(4145|4154|4312|4557|4969|4280|5155|5406|5289)/.test(cleaned)) return 'BCP';
-  if (/^(4143|4214|4213|5122|5491|5169|5300|5198)/.test(cleaned)) return 'Interbank';
-  if (/^(4220|4551|4555|5256|5188)/.test(cleaned)) return 'BBVA';
-  if (/^(4321|4894|5160|5438|5273)/.test(cleaned)) return 'Scotiabank';
-  if (/^(3600|3000|4556|4122)/.test(cleaned)) return 'Diners / Pichincha';
-  
-  return null;
-}
-
-// Iconos SVG de marcas de tarjeta
-const CardBrandIcon = ({ brand }) => {
-  if (brand === 'visa') {
-    return (
-      <svg viewBox="0 0 48 32" className="w-10 h-7" fill="none">
-        <rect width="48" height="32" rx="4" fill="#1A1F71" />
-        <text x="24" y="20" textAnchor="middle" fill="#FFFFFF" fontFamily="Arial Black, sans-serif" fontSize="12" fontWeight="900">VISA</text>
-      </svg>
-    );
-  }
-  if (brand === 'mastercard') {
-    return (
-      <svg viewBox="0 0 48 32" className="w-10 h-7" fill="none">
-        <rect width="48" height="32" rx="4" fill="#252525" />
-        <circle cx="19" cy="16" r="9" fill="#EB001B" />
-        <circle cx="29" cy="16" r="9" fill="#F79E1B" />
-        <path d="M24 9.17a9 9 0 010 13.66 9 9 0 010-13.66z" fill="#FF5F00" />
-      </svg>
-    );
-  }
-  if (brand === 'amex') {
-    return (
-      <svg viewBox="0 0 48 32" className="w-10 h-7" fill="none">
-        <rect width="48" height="32" rx="4" fill="#2E77BB" />
-        <text x="24" y="20" textAnchor="middle" fill="#FFFFFF" fontFamily="Arial, sans-serif" fontSize="8" fontWeight="900">AMEX</text>
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 48 32" className="w-10 h-7" fill="none">
-      <rect width="48" height="32" rx="4" fill="#E0DDD5" />
-      <rect x="8" y="10" width="32" height="4" rx="1" fill="#B0A998" />
-      <rect x="8" y="18" width="20" height="4" rx="1" fill="#B0A998" />
-    </svg>
-  );
-};
+import CardBrandIcon from './CardBrandIcon';
+import CancellationPolicyNotice from './CancellationPolicyNotice';
+import {
+  EMPTY_CARD,
+  formatCardField,
+  detectCardBrand,
+  detectCardBank,
+  validateCard,
+  cardPayload,
+} from '../utils/card';
+import { validateCoupon, couponDiscount } from '../utils/coupon';
+import { roomImage as getRoomImage } from '../constants/rooms';
+import formatCurrency from '../utils/formatCurrency';
+import { apiErrorMessage, apiStatus } from '../utils/apiError';
+import { toYmd, nightsBetween } from '../utils/dates';
+import logError from '../utils/logError';
+import useEscapeKey from '../hooks/useEscapeKey';
 
 /**
  * PASOS del checkout:
@@ -110,14 +35,54 @@ const STEPS = [
   { label: 'Confirmación', icon: 'verified' },
 ];
 
+const NAME_REGEX = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+const REPEATING_REGEX = /(.)\1{2,}/;
+
+function StepIndicator({ currentStep }) {
+  return (
+    <ol className="flex items-center justify-center gap-1 px-6 py-3 bg-[#f5f3ee] border-b border-[#d1c5af]" aria-label="Pasos del checkout">
+      {STEPS.map((step, idx) => (
+        <li key={step.label} className="flex items-center gap-1" aria-current={idx === currentStep ? 'step' : undefined}>
+          <div
+            className={`flex items-center gap-1 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider font-bold transition-all duration-300 ${
+              idx === currentStep
+                ? 'bg-[#14213d] text-[#c9a227] border border-[#c9a227]'
+                : idx < currentStep
+                ? 'bg-[#c9a227]/20 text-[#755b00] border border-[#c9a227]/50'
+                : 'bg-[#fbf9f4] text-[#78716c] border border-[#d1c5af]'
+            }`}
+          >
+            <span className="material-symbols-outlined text-xs" aria-hidden="true">
+              {idx < currentStep ? 'check_circle' : step.icon}
+            </span>
+            <span className="hidden sm:inline">{step.label}</span>
+          </div>
+          {idx < STEPS.length - 1 && (
+            <div className={`w-4 h-px ${idx < currentStep ? 'bg-[#c9a227]' : 'bg-[#d1c5af]'}`} aria-hidden="true" />
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export default function CheckoutModal({
   room,
   initialDates = {},
   onClose,
   onPaymentSuccess,
 }) {
+  const uid = useId();
+  const fid = (name) => `${uid}-${name}`;
+
   // ===== Estado del paso actual =====
   const [currentStep, setCurrentStep] = useState(0);
+  const intervalRef = useRef(null);
+  // Huella del último checkout intent creado, para no duplicar reservas pendientes al reintentar.
+  const intentRef = useRef({ fingerprint: null, code: null });
+
+  // Limpiar el intervalo de mensajes si el modal se desmonta
+  useEffect(() => () => clearInterval(intervalRef.current), []);
 
   // ===== Fechas =====
   const todayStr = new Date().toISOString().split('T')[0];
@@ -144,12 +109,7 @@ export default function CheckoutModal({
   const [companions, setCompanions] = useState([]);
 
   // ===== Datos de tarjeta =====
-  const [cardData, setCardData] = useState({
-    card_number: '',
-    card_expiry: '',
-    card_cvc: '',
-    card_holder: '',
-  });
+  const [cardData, setCardData] = useState(EMPTY_CARD);
 
   // ===== Cupones =====
   const [couponCode, setCouponCode] = useState('');
@@ -160,21 +120,18 @@ export default function CheckoutModal({
   const [bookedIntervals, setBookedIntervals] = useState([]);
 
   useEffect(() => {
-    const fetchBookedDates = async () => {
-      try {
-        const datesArray = await getRoomBookedDates(room.id);
-        const intervals = datesArray.map(b => ({
-          start: new Date(b.check_in + 'T00:00:00'),
-          end: new Date(b.check_out + 'T00:00:00')
-        }));
-        setBookedIntervals(intervals);
-      } catch (err) {
-        console.error('Error al obtener fechas reservadas:', err);
-      }
-    };
-    if (room?.id) {
-      fetchBookedDates();
-    }
+    if (!room?.id) return undefined;
+    let cancelled = false;
+    getRoomBookedDates(room.id)
+      .then((datesArray) => {
+        if (cancelled) return;
+        setBookedIntervals((datesArray || []).map((b) => ({
+          start: new Date(`${b.check_in}T00:00:00`),
+          end: new Date(`${b.check_out}T00:00:00`),
+        })));
+      })
+      .catch((err) => logError('checkout:booked-dates', err));
+    return () => { cancelled = true; };
   }, [room?.id]);
 
   // ===== Estado de la transacción =====
@@ -182,42 +139,26 @@ export default function CheckoutModal({
   const [errorMessage, setErrorMessage] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [bookingCode, setBookingCode] = useState(null);
+  const [expiresAt, setExpiresAt] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
   const [processingMessage, setProcessingMessage] = useState('');
 
   // ===== Cálculos derivados =====
-  const nights = (() => {
-    if (!dates.check_in || !dates.check_out) return 1;
-    const start = new Date(dates.check_in);
-    const end = new Date(dates.check_out);
-    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? diff : 1;
-  })();
-  let subTotal = nights * Number(room.price_per_night);
-  let discountAmount = 0;
-  
-  if (appliedCoupon) {
-     if (appliedCoupon.discount_type === 'percentage') {
-         discountAmount = subTotal * (parseFloat(appliedCoupon.discount_value) / 100);
-     } else {
-         discountAmount = parseFloat(appliedCoupon.discount_value);
-     }
-  }
-  
+  const nights = Math.max(1, nightsBetween(dates.check_in, dates.check_out));
+  const subTotal = nights * Number(room.price_per_night);
+  const discountAmount = couponDiscount(appliedCoupon, subTotal);
   const totalAmount = Math.max(0, subTotal - discountAmount);
-  
+
   const cardBrand = detectCardBrand(cardData.card_number);
   const cardBank = detectCardBank(cardData.card_number);
-  const roomImage = room.image_url || DEFAULT_IMAGES[room.bed_type] || DEFAULT_IMAGES.default;
+  const roomImage = getRoomImage(room);
+
+  useEscapeKey(() => { if (currentStep !== 2 && !loading) onClose(); });
 
   // ===== Handlers =====
   const handleDateChange = (name, date) => {
     if (!date) return;
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    
+    const dateStr = toYmd(date);
     setDates((prev) => ({ ...prev, [name]: dateStr }));
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
@@ -238,12 +179,7 @@ export default function CheckoutModal({
 
   const handleCardChange = (e) => {
     const { name, value } = e.target;
-    let formatted = value;
-    if (name === 'card_number') formatted = formatCardNumber(value);
-    if (name === 'card_expiry') formatted = formatExpiry(value);
-    if (name === 'card_cvc') formatted = value.replace(/\D/g, '').slice(0, 4);
-    if (name === 'card_holder') formatted = value.replace(/[0-9]/g, '');
-    
+    const formatted = formatCardField(name, value);
     setCardData((prev) => ({ ...prev, [name]: formatted }));
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: null }));
@@ -252,31 +188,29 @@ export default function CheckoutModal({
 
   const handleAddCompanion = () => {
     if (companions.length + 1 >= room.capacity) {
-      alert(`La capacidad máxima de la habitación es ${room.capacity} persona(s).`);
+      setErrorMessage(`La capacidad máxima de la habitación es ${room.capacity} persona(s).`);
       return;
     }
-    setCompanions([...companions, { name: '', surname: '', document_type: 'DNI', document_number: '' }]);
+    setCompanions((prev) => [...prev, { name: '', surname: '', document_type: 'DNI', document_number: '' }]);
   };
 
+  // Actualización inmutable del acompañante
   const updateCompanion = (index, field, value) => {
-    const newCompanions = [...companions];
-    newCompanions[index][field] = value;
-    setCompanions(newCompanions);
+    setCompanions((prev) => prev.map((comp, i) => (i === index ? { ...comp, [field]: value } : comp)));
   };
 
   const removeCompanion = (index) => {
-    const newCompanions = companions.filter((_, i) => i !== index);
-    setCompanions(newCompanions);
+    setCompanions((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
     try {
-      const res = await api.post('/coupons/validate', { code: couponCode.trim() });
-      setAppliedCoupon(res.data.coupon);
+      const coupon = await validateCoupon(couponCode);
+      setAppliedCoupon(coupon);
       setCouponError('');
     } catch (err) {
-      setCouponError(err.response?.data?.error || 'Cupón inválido');
+      setCouponError(err.message || 'Cupón inválido');
       setAppliedCoupon(null);
     }
   };
@@ -290,8 +224,8 @@ export default function CheckoutModal({
   // ===== Validación del Paso 0 (Resumen + Huésped) =====
   const validateStep0 = () => {
     const errors = {};
-    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    const repeatingRegex = /(.)\1{2,}/;
+    const nameRegex = NAME_REGEX;
+    const repeatingRegex = REPEATING_REGEX;
 
     if (!dates.check_in) errors.check_in = 'Fecha de check-in requerida';
     if (!dates.check_out) errors.check_out = 'Fecha de check-out requerida';
@@ -325,7 +259,7 @@ export default function CheckoutModal({
       errors.document_number = 'El DNI debe tener 8 dígitos numéricos';
     }
 
-    if (guestData.guest_phone && !/^\+?[0-9\s\-]+$/.test(guestData.guest_phone)) {
+    if (guestData.guest_phone && !/^\+?[0-9\s-]+$/.test(guestData.guest_phone)) {
       errors.guest_phone = 'Ingrese un teléfono válido';
     }
 
@@ -343,44 +277,7 @@ export default function CheckoutModal({
 
   // ===== Validación del Paso 1 (Tarjeta) =====
   const validateStep1 = () => {
-    const errors = {};
-    const cleanNumber = cardData.card_number.replace(/\s/g, '');
-
-    if (!cleanNumber || cleanNumber.length < 13) {
-      errors.card_number = 'Ingrese un número de tarjeta válido (13-16 dígitos)';
-    }
-    if (!cardData.card_expiry || !/^\d{2}\/\d{2}$/.test(cardData.card_expiry)) {
-      errors.card_expiry = 'Ingrese la fecha de expiración (MM/YY)';
-    } else {
-      const [mm, yy] = cardData.card_expiry.split('/');
-      const expMonth = parseInt(mm, 10);
-      const expYear = parseInt(yy, 10) + 2000;
-      const now = new Date();
-      const currYear = now.getFullYear();
-      const currMonth = now.getMonth() + 1;
-
-      if (expMonth < 1 || expMonth > 12) {
-        errors.card_expiry = 'Mes inválido (01-12)';
-      } else if (expYear < currYear || (expYear === currYear && expMonth < currMonth)) {
-        errors.card_expiry = 'La tarjeta está vencida';
-      }
-    }
-    if (!cardData.card_cvc || cardData.card_cvc.length < 3) {
-      errors.card_cvc = 'Ingrese el código CVC (3-4 dígitos)';
-    }
-    
-    const holder = cardData.card_holder.trim();
-    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    const repeatingRegex = /(.)\1{2,}/;
-    
-    if (!holder) {
-      errors.card_holder = 'Nombre del titular es obligatorio';
-    } else if (holder.length < 5 || !holder.includes(' ')) {
-      errors.card_holder = 'Ingrese nombre y apellido completo';
-    } else if (!nameRegex.test(holder) || repeatingRegex.test(holder)) {
-      errors.card_holder = 'Ingrese un nombre válido';
-    }
-
+    const errors = validateCard(cardData);
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -392,28 +289,39 @@ export default function CheckoutModal({
     setLoading(true);
     setErrorMessage(null);
 
-    try {
-      const payload = {
-        room_id: room.id,
-        check_in: dates.check_in,
-        check_out: dates.check_out,
-        guest_name: guestData.guest_name.trim(),
-        guest_surname: guestData.guest_surname.trim(),
-        guest_email: guestData.guest_email.trim(),
-        document_type: guestData.document_type,
-        document_number: guestData.document_number.trim(),
-        guest_phone: guestData.guest_phone.trim() || undefined,
-        notes: guestData.notes.trim() || undefined,
-        companions: companions,
-        coupon_code: appliedCoupon ? appliedCoupon.code : null
-      };
+    const payload = {
+      room_id: room.id,
+      check_in: dates.check_in,
+      check_out: dates.check_out,
+      guest_name: guestData.guest_name.trim(),
+      guest_surname: guestData.guest_surname.trim(),
+      guest_email: guestData.guest_email.trim(),
+      document_type: guestData.document_type,
+      document_number: guestData.document_number.trim(),
+      guest_phone: guestData.guest_phone.trim() || undefined,
+      notes: guestData.notes.trim() || undefined,
+      companions: companions,
+      coupon_code: appliedCoupon ? appliedCoupon.code : null
+    };
 
+    // Reutilizar la reserva pendiente si los datos no cambiaron (evita duplicados al reintentar)
+    const fingerprint = JSON.stringify(payload);
+    if (intentRef.current.code && intentRef.current.fingerprint === fingerprint) {
+      setBookingCode(intentRef.current.code);
+      setCurrentStep(1);
+      setLoading(false);
+      return;
+    }
+
+    try {
       const result = await createCheckoutIntent(payload);
+      intentRef.current = { fingerprint, code: result.booking_code };
       setBookingCode(result.booking_code);
+      setExpiresAt(result.expires_at || null);
       setCurrentStep(1); // Ir al formulario de tarjeta
     } catch (err) {
-      console.error('Error al crear checkout intent:', err);
-      const apiMsg = err.response?.data?.message || 'No se pudo iniciar el proceso de pago. Verifique los datos e intente nuevamente.';
+      logError('checkout:intent', err);
+      const apiMsg = apiErrorMessage(err, 'No se pudo iniciar el proceso de pago. Verifique los datos e intente nuevamente.');
       const apiErrors = err.response?.data?.errors || {};
       setErrorMessage(apiMsg);
       setFieldErrors(apiErrors);
@@ -440,7 +348,8 @@ export default function CheckoutModal({
 
     let messageIndex = 0;
     setProcessingMessage(messages[0]);
-    const interval = setInterval(() => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
       messageIndex++;
       if (messageIndex < messages.length) {
         setProcessingMessage(messages[messageIndex]);
@@ -450,15 +359,13 @@ export default function CheckoutModal({
     try {
       const result = await processMockPayment({
         booking_code: bookingCode,
-        card_number: cardData.card_number.replace(/\s/g, ''),
-        card_expiry: cardData.card_expiry,
-        card_cvc: cardData.card_cvc,
-        card_holder: cardData.card_holder.trim(),
+        ...cardPayload(cardData),
       });
 
-      clearInterval(interval);
+      clearInterval(intervalRef.current);
 
       if (result.success) {
+        setCardData(EMPTY_CARD);
         setPaymentResult(result);
         setCurrentStep(3); // Paso de confirmación
       } else {
@@ -466,42 +373,25 @@ export default function CheckoutModal({
         setCurrentStep(1); // Volver al formulario
       }
     } catch (err) {
-      clearInterval(interval);
-      console.error('Error al procesar pago:', err);
-      const msg = err.response?.data?.message || 'Error al procesar el pago. Intente nuevamente.';
-      setErrorMessage(msg);
+      clearInterval(intervalRef.current);
+      logError('checkout:payment', err);
+      // Si la reserva pendiente ya no es pagable (expirada/cancelada), el próximo intento creará otra.
+      const status = apiStatus(err);
+      if (status === 409 || status === 404 || status === 410) {
+        // Reserva ya pagada o el bloqueo de 30 minutos expiró: hay que iniciar de nuevo
+        intentRef.current = { fingerprint: null, code: null };
+        setBookingCode(null);
+        setExpiresAt(null);
+        setErrorMessage(`${apiErrorMessage(err, 'La reserva temporal expiró.')} Vuelva al paso anterior para iniciar nuevamente la reserva.`);
+        setCurrentStep(0);
+        return;
+      }
+      setErrorMessage(apiErrorMessage(err, 'Error al procesar el pago. Intente nuevamente.'));
       setCurrentStep(1); // Volver al formulario
     } finally {
       setLoading(false);
     }
   };
-
-  // ===== Renderizado del indicador de pasos =====
-  const StepIndicator = () => (
-    <div className="flex items-center justify-center gap-1 px-6 py-3 bg-[#f5f3ee] border-b border-[#d1c5af]">
-      {STEPS.map((step, idx) => (
-        <div key={idx} className="flex items-center gap-1">
-          <div
-            className={`flex items-center gap-1 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider font-bold transition-all duration-300 ${
-              idx === currentStep
-                ? 'bg-[#14213d] text-[#c9a227] border border-[#c9a227]'
-                : idx < currentStep
-                ? 'bg-[#c9a227]/20 text-[#755b00] border border-[#c9a227]/50'
-                : 'bg-[#fbf9f4] text-[#78716c] border border-[#d1c5af]'
-            }`}
-          >
-            <span className="material-symbols-outlined text-xs">
-              {idx < currentStep ? 'check_circle' : step.icon}
-            </span>
-            <span className="hidden sm:inline">{step.label}</span>
-          </div>
-          {idx < STEPS.length - 1 && (
-            <div className={`w-4 h-px ${idx < currentStep ? 'bg-[#c9a227]' : 'bg-[#d1c5af]'}`} />
-          )}
-        </div>
-      ))}
-    </div>
-  );
 
   // ===== PASO 0: Resumen + Datos del Huésped =====
   const renderStep0 = () => (
@@ -565,7 +455,7 @@ export default function CheckoutModal({
             <div className="space-y-2 text-xs font-mono text-[#4d4635]">
               <div className="flex justify-between">
                 <span>Tarifa por noche:</span>
-                <span className="font-bold text-[#1b1c19]">S/ {Number(room.price_per_night).toFixed(2)}</span>
+                <span className="font-bold text-[#1b1c19]">{formatCurrency(room.price_per_night)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Duración de estadía:</span>
@@ -581,18 +471,21 @@ export default function CheckoutModal({
                     <span className="material-symbols-outlined text-[14px]">local_activity</span>
                     Descuento ({appliedCoupon.code})
                   </span>
-                  <span className="font-bold">- S/ {discountAmount.toFixed(2)}</span>
+                  <span className="font-bold">- {formatCurrency(discountAmount)}</span>
                 </div>
               )}
               <div className="border-t border-[#d1c5af] pt-2 mt-2 flex justify-between items-baseline">
                 <span className="font-serif font-bold text-sm text-[#14213d]">Total a Pagar:</span>
                 <span className="font-mono font-bold text-lg text-[#14213d] bg-[#c9a227]/20 px-2 py-0.5 border border-[#c9a227]">
-                  S/ {totalAmount.toFixed(2)}
+                  {formatCurrency(totalAmount)}
                 </span>
               </div>
             </div>
           </div>
-          
+
+          {/* Política de cancelación (SHE-028) */}
+          <CancellationPolicyNotice />
+
           {/* Aplicar Cupón */}
           <div className="bg-[#fcfcfc] border border-[#d1c5af] p-4">
              <h4 className="font-mono text-xs uppercase font-bold text-[#14213d] tracking-wider mb-2 flex items-center gap-1.5">
@@ -602,14 +495,16 @@ export default function CheckoutModal({
              {!appliedCoupon ? (
                <div>
                  <div className="flex gap-2">
-                   <input 
-                     type="text" 
-                     placeholder="Ingresa tu código" 
+                   <label htmlFor={fid('coupon')} className="sr-only">Código de cupón</label>
+                   <input
+                     id={fid('coupon')}
+                     type="text"
+                     placeholder="Ingresa tu código"
                      value={couponCode}
                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                      className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none uppercase"
                    />
-                   <button 
+                   <button
                      type="button"
                      onClick={handleApplyCoupon}
                      className="bg-[#14213d] hover:bg-[#0a1128] text-white font-mono text-[10px] font-bold uppercase tracking-widest px-4 py-2 transition-colors"
@@ -625,8 +520,8 @@ export default function CheckoutModal({
                    <span className="material-symbols-outlined text-[#0047b3] text-sm">check_circle</span>
                    <span className="font-mono text-xs font-bold text-[#0047b3]">{appliedCoupon.code} aplicado</span>
                  </div>
-                 <button onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]">
-                   <span className="material-symbols-outlined text-sm">delete</span>
+                 <button type="button" onClick={handleRemoveCoupon} className="text-[#ba1a1a] hover:text-[#93000a]" aria-label="Quitar cupón">
+                   <span className="material-symbols-outlined text-sm" aria-hidden="true">delete</span>
                  </button>
                </div>
              )}
@@ -656,10 +551,11 @@ export default function CheckoutModal({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+                <label htmlFor={fid('check_in')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
                   Check-In (Llegada) *
                 </label>
                 <DatePicker
+                  id={fid('check_in')}
                   selected={dates.check_in ? new Date(dates.check_in + 'T12:00:00') : null}
                   onChange={(date) => handleDateChange('check_in', date)}
                   minDate={new Date()}
@@ -673,10 +569,11 @@ export default function CheckoutModal({
                 )}
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+                <label htmlFor={fid('check_out')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
                   Check-Out (Salida) *
                 </label>
                 <DatePicker
+                  id={fid('check_out')}
                   selected={dates.check_out ? new Date(dates.check_out + 'T12:00:00') : null}
                   onChange={(date) => handleDateChange('check_out', date)}
                   minDate={dates.check_in ? new Date(dates.check_in + 'T12:00:00') : new Date()}
@@ -701,20 +598,20 @@ export default function CheckoutModal({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Nombres *</label>
-                <input type="text" name="guest_name" placeholder="Ej. Juan Carlos" value={guestData.guest_name} onChange={handleGuestChange} required
+                <label htmlFor={fid('guest_name')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Nombres *</label>
+                <input id={fid('guest_name')} type="text" name="guest_name" autoComplete="given-name" placeholder="Ej. Juan Carlos" value={guestData.guest_name} onChange={handleGuestChange} required
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-sans text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
                 {fieldErrors.guest_name && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.guest_name}</p>}
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Apellidos *</label>
-                <input type="text" name="guest_surname" placeholder="Ej. Pérez Rossi" value={guestData.guest_surname} onChange={handleGuestChange} required
+                <label htmlFor={fid('guest_surname')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Apellidos *</label>
+                <input id={fid('guest_surname')} type="text" name="guest_surname" autoComplete="family-name" placeholder="Ej. Pérez Rossi" value={guestData.guest_surname} onChange={handleGuestChange} required
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-sans text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
                 {fieldErrors.guest_surname && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.guest_surname}</p>}
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Tipo de Documento *</label>
-                <select name="document_type" value={guestData.document_type} onChange={handleGuestChange}
+                <label htmlFor={fid('document_type')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Tipo de Documento *</label>
+                <select id={fid('document_type')} name="document_type" value={guestData.document_type} onChange={handleGuestChange}
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none cursor-pointer">
                   <option value="DNI">DNI (8 dígitos)</option>
                   <option value="Pasaporte">Pasaporte</option>
@@ -722,26 +619,26 @@ export default function CheckoutModal({
                 </select>
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">N° de Documento *</label>
-                <input type="text" name="document_number" placeholder={guestData.document_type === 'DNI' ? '8 dígitos' : 'N° Documento'}
+                <label htmlFor={fid('document_number')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">N° de Documento *</label>
+                <input id={fid('document_number')} type="text" name="document_number" placeholder={guestData.document_type === 'DNI' ? '8 dígitos' : 'N° Documento'}
                   value={guestData.document_number} onChange={handleGuestChange} required
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
                 {fieldErrors.document_number && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.document_number}</p>}
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Correo Electrónico *</label>
-                <input type="email" name="guest_email" placeholder="nombre@ejemplo.com" value={guestData.guest_email} onChange={handleGuestChange} required
+                <label htmlFor={fid('guest_email')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Correo Electrónico *</label>
+                <input id={fid('guest_email')} type="email" name="guest_email" autoComplete="email" placeholder="nombre@ejemplo.com" value={guestData.guest_email} onChange={handleGuestChange} required
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-sans text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
                 {fieldErrors.guest_email && <p className="text-[#ba1a1a] font-mono text-[10px] mt-1">{fieldErrors.guest_email}</p>}
               </div>
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Teléfono / WhatsApp</label>
-                <input type="tel" name="guest_phone" placeholder="+51 987 654 321" value={guestData.guest_phone} onChange={handleGuestChange}
+                <label htmlFor={fid('guest_phone')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Teléfono / WhatsApp</label>
+                <input id={fid('guest_phone')} type="tel" name="guest_phone" autoComplete="tel" placeholder="+51 987 654 321" value={guestData.guest_phone} onChange={handleGuestChange}
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
               </div>
               <div className="sm:col-span-2">
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Peticiones Especiales (Opcional)</label>
-                <textarea name="notes" rows="2" placeholder="Horario estimado de llegada, preferencias de piso, etc."
+                <label htmlFor={fid('notes')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Peticiones Especiales (Opcional)</label>
+                <textarea id={fid('notes')} name="notes" rows="2" placeholder="Horario estimado de llegada, preferencias de piso, etc."
                   value={guestData.notes} onChange={handleGuestChange}
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-sans text-[#1b1c19] focus:border-[#14213d] focus:outline-none resize-none" />
               </div>
@@ -756,31 +653,31 @@ export default function CheckoutModal({
                 <div className="space-y-3">
                   {companions.map((comp, idx) => (
                     <div key={idx} className="bg-[#fbf9f4] border border-[#d1c5af]/50 p-3 relative">
-                      <button type="button" onClick={() => removeCompanion(idx)} className="absolute top-2 right-2 text-[#ba1a1a] hover:bg-[#ba1a1a]/10 p-1 rounded-full">
-                        <span className="material-symbols-outlined text-sm">close</span>
+                      <button type="button" onClick={() => removeCompanion(idx)} className="absolute top-2 right-2 text-[#ba1a1a] hover:bg-[#ba1a1a]/10 p-1 rounded-full" aria-label={`Quitar acompañante ${idx + 1}`}>
+                        <span className="material-symbols-outlined text-sm" aria-hidden="true">close</span>
                       </button>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div>
-                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Nombre *</label>
-                          <input type="text" value={comp.name} onChange={e => updateCompanion(idx, 'name', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          <label htmlFor={fid(`comp-${idx}-name`)} className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Nombre *</label>
+                          <input id={fid(`comp-${idx}-name`)} type="text" value={comp.name} onChange={e => updateCompanion(idx, 'name', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
                           {fieldErrors[`comp_${idx}_name`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_name`]}</p>}
                         </div>
                         <div>
-                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Apellidos *</label>
-                          <input type="text" value={comp.surname} onChange={e => updateCompanion(idx, 'surname', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          <label htmlFor={fid(`comp-${idx}-surname`)} className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Apellidos *</label>
+                          <input id={fid(`comp-${idx}-surname`)} type="text" value={comp.surname} onChange={e => updateCompanion(idx, 'surname', e.target.value)} required pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$" className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
                           {fieldErrors[`comp_${idx}_surname`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_surname`]}</p>}
                         </div>
                         <div>
-                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Documento *</label>
-                          <select value={comp.document_type} onChange={e => updateCompanion(idx, 'document_type', e.target.value)} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs">
+                          <label htmlFor={fid(`comp-${idx}-document_type`)} className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">Documento *</label>
+                          <select id={fid(`comp-${idx}-document_type`)} value={comp.document_type} onChange={e => updateCompanion(idx, 'document_type', e.target.value)} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs">
                             <option value="DNI">DNI</option>
                             <option value="Pasaporte">Pasaporte</option>
                             <option value="Carnet Extranjería">C. Extranjería</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">N° Doc *</label>
-                          <input type="text" value={comp.document_number} onChange={e => updateCompanion(idx, 'document_number', e.target.value)} required pattern={comp.document_type === 'DNI' ? "^[0-9]{8}$" : ".*"} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
+                          <label htmlFor={fid(`comp-${idx}-document_number`)} className="block font-mono text-[9px] uppercase font-bold text-[#4d4635] mb-1">N° Doc *</label>
+                          <input id={fid(`comp-${idx}-document_number`)} type="text" value={comp.document_number} onChange={e => updateCompanion(idx, 'document_number', e.target.value)} required pattern={comp.document_type === 'DNI' ? "^[0-9]{8}$" : ".*"} className="w-full border-b border-[#d1c5af] focus:border-[#14213d] bg-transparent outline-none py-1 text-xs" />
                           {fieldErrors[`comp_${idx}_doc`] && <p className="text-[#ba1a1a] text-[9px] mt-1">{fieldErrors[`comp_${idx}_doc`]}</p>}
                         </div>
                       </div>
@@ -822,11 +719,18 @@ export default function CheckoutModal({
             Monto Total a Pagar
           </span>
           <span className="font-mono text-3xl font-bold text-[#fbf9f4]">
-            S/ {totalAmount.toFixed(2)}
+            {formatCurrency(totalAmount)}
           </span>
           <span className="font-mono text-[10px] text-[#d1c5af] block mt-1">
             {nights} {nights === 1 ? 'noche' : 'noches'} • Hab. {room.room_number} • Código: {bookingCode}
           </span>
+          {expiresAt && (
+            <span className="font-mono text-[10px] text-[#c9a227] block mt-2">
+              La habitación queda reservada temporalmente hasta las{' '}
+              {new Date(expiresAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}.
+              Complete el pago antes de esa hora.
+            </span>
+          )}
         </div>
 
         {/* Simulador de Tarjeta Visual */}
@@ -886,17 +790,19 @@ export default function CheckoutModal({
           </h4>
 
           <div>
-            <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+            <label htmlFor={fid('card_number')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
               Número de Tarjeta *
             </label>
             <div className="relative">
               <input
+                id={fid('card_number')}
                 type="text"
                 name="card_number"
                 placeholder="4242 4242 4242 4242"
                 value={cardData.card_number}
                 onChange={handleCardChange}
-                maxLength={19}
+                maxLength={23}
+                inputMode="numeric"
                 autoComplete="cc-number"
                 className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2.5 pr-14 text-sm font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none tracking-wider"
               />
@@ -910,10 +816,11 @@ export default function CheckoutModal({
           </div>
 
           <div>
-            <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+            <label htmlFor={fid('card_holder')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
               Nombre del Titular *
             </label>
             <input
+              id={fid('card_holder')}
               type="text"
               name="card_holder"
               placeholder="JUAN CARLOS PÉREZ"
@@ -929,10 +836,11 @@ export default function CheckoutModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
-                Vencimiento *
-              </label>
+              <label htmlFor={fid('card_expiry')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+              Vencimiento *
+            </label>
               <input
+                id={fid('card_expiry')}
                 type="text"
                 name="card_expiry"
                 placeholder="MM/YY"
@@ -947,10 +855,11 @@ export default function CheckoutModal({
               )}
             </div>
             <div>
-              <label className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
-                CVC / CVV *
-              </label>
+              <label htmlFor={fid('card_cvc')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+              CVC / CVV *
+            </label>
               <input
+                id={fid('card_cvc')}
                 type="password"
                 name="card_cvc"
                 placeholder="•••"
@@ -1083,14 +992,14 @@ export default function CheckoutModal({
               <div>
                 <span className="text-[10px] uppercase font-bold text-[#78716c] block">Descuento ({pd.coupon_code})</span>
                 <span className="font-bold text-[#ba1a1a] text-sm">
-                  - S/ {Number(pd.discount_amount).toFixed(2)}
+                  - {formatCurrency(pd.discount_amount)}
                 </span>
               </div>
             )}
             <div>
               <span className="text-[10px] uppercase font-bold text-[#78716c] block">Monto Total Cobrado</span>
               <span className="font-bold text-[#14213d] text-sm">
-                S/ {Number(paymentResult?.payment?.amount || totalAmount).toFixed(2)}
+                {formatCurrency(paymentResult?.payment?.amount || totalAmount)}
               </span>
             </div>
           </div>
@@ -1168,8 +1077,8 @@ export default function CheckoutModal({
           </button>
           <button type="button" onClick={handleProcessPayment} disabled={loading}
             className="w-full sm:w-auto px-8 py-3 bg-[#14213d] hover:bg-[#0a1628] text-[#fbf9f4] font-mono text-xs uppercase tracking-widest font-bold border border-[#c9a227] shadow-[2px_2px_0px_#c9a227] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
-            <span className="material-symbols-outlined text-sm">lock</span>
-            <span>Pagar S/ {totalAmount.toFixed(2)}</span>
+            <span className="material-symbols-outlined text-sm" aria-hidden="true">lock</span>
+            <span>Pagar {formatCurrency(totalAmount)}</span>
           </button>
         </>
       );
@@ -1184,7 +1093,11 @@ export default function CheckoutModal({
             <span>Imprimir Comprobante</span>
           </button>
           <button type="button"
-            onClick={() => onPaymentSuccess(paymentResult)}
+            onClick={() => onPaymentSuccess({
+              ...paymentResult,
+              booking_code: paymentResult?.booking_code || bookingCode,
+              guest_email: guestData.guest_email.trim(),
+            })}
             className="w-full sm:w-auto px-6 py-2.5 bg-[#c9a227] hover:bg-[#b08b1a] text-[#14213d] font-mono text-xs uppercase font-bold border border-[#14213d] shadow-[2px_2px_0px_#14213d] cursor-pointer transition-all flex items-center justify-center gap-1">
             <span className="material-symbols-outlined text-sm">receipt_long</span>
             <span>Ver Comprobante Completo</span>
@@ -1198,7 +1111,12 @@ export default function CheckoutModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#14213d]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
-      <div className="bg-[#fbf9f4] border border-[#d1c5af] shadow-[4px_4px_0px_rgba(20,33,61,0.25)] max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={fid('title')}
+        className="bg-[#fbf9f4] border border-[#d1c5af] shadow-[4px_4px_0px_rgba(20,33,61,0.25)] max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden"
+      >
 
         {/* Modal Header */}
         <div className="bg-[#14213d] text-[#fbf9f4] px-6 py-4 flex items-center justify-between border-b border-[#c9a227]">
@@ -1207,7 +1125,7 @@ export default function CheckoutModal({
               {currentStep === 3 ? 'verified' : 'shopping_cart_checkout'}
             </span>
             <div>
-              <h2 className="font-serif text-lg sm:text-xl font-bold tracking-wide">
+              <h2 id={fid('title')} className="font-serif text-lg sm:text-xl font-bold tracking-wide">
                 {currentStep === 3 ? '¡Reserva Confirmada!' : 'Checkout Seguro'}
               </h2>
               <p className="font-mono text-[11px] text-[#d1c5af] uppercase">
@@ -1222,15 +1140,15 @@ export default function CheckoutModal({
               type="button"
               onClick={onClose}
               className="text-[#d1c5af] hover:text-white transition-colors cursor-pointer p-1"
-              title="Cerrar ventana"
+              aria-label="Cerrar ventana"
             >
-              <span className="material-symbols-outlined text-2xl">close</span>
+              <span className="material-symbols-outlined text-2xl" aria-hidden="true">close</span>
             </button>
           )}
         </div>
 
         {/* Step Indicator */}
-        <StepIndicator />
+        <StepIndicator currentStep={currentStep} />
 
         {/* Body por paso */}
         {currentStep === 0 && renderStep0()}

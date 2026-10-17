@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
 import Toast from '../../components/Toast';
 import { getStaff, createStaff, updateStaff, toggleStaffStatus } from '../../services/staffService';
+import { apiErrorMessage } from '../../utils/apiError';
+import logError from '../../utils/logError';
 
 export default function StaffManagement() {
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Toast State
-  const [toastMessage, setToastMessage] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // Form State
   const [isEditing, setIsEditing] = useState(false);
@@ -23,27 +24,24 @@ export default function StaffManagement() {
   });
   const [formErrors, setFormErrors] = useState({});
 
-  useEffect(() => {
-    fetchStaff();
-  }, []);
+  const showNotification = (message, type = 'success') => setToast({ message, type });
 
-  const fetchStaff = async () => {
+  const fetchStaff = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getStaff();
-      setStaffList(data);
+      setStaffList(data || []);
     } catch (err) {
-      console.error('Error fetching staff', err);
-      showNotification('Error al cargar la lista del personal');
+      logError('staff:list', err);
+      setToast({ type: 'error', message: apiErrorMessage(err, 'Error al cargar la lista del personal') });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const showNotification = (msg) => {
-    setToastMessage(msg);
-    setShowToast(true);
-  };
+  useEffect(() => {
+    fetchStaff();
+  }, [fetchStaff]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -62,10 +60,10 @@ export default function StaffManagement() {
     if (!formData.name.trim()) errors.name = 'El nombre es requerido';
     if (!formData.email.trim()) errors.email = 'El correo electrónico es requerido';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = 'Correo electrónico inválido';
-    
+
     if (!isEditing && !formData.password) errors.password = 'La contraseña es requerida para nuevos usuarios';
-    if (formData.password && formData.password.length < 6) errors.password = 'La contraseña debe tener al menos 6 caracteres';
-    
+    if (formData.password && formData.password.length < 8) errors.password = 'La contraseña debe tener al menos 8 caracteres';
+
     return errors;
   };
 
@@ -88,7 +86,7 @@ export default function StaffManagement() {
       resetForm();
       fetchStaff();
     } catch (err) {
-      console.error('Error saving staff', err);
+      logError('staff:save', err);
       if (err.response && err.response.status === 422) {
         // Validación backend
         const serverErrors = err.response.data.errors || {};
@@ -98,7 +96,7 @@ export default function StaffManagement() {
         });
         setFormErrors(formattedErrors);
       } else {
-        showNotification('Ocurrió un error al guardar los datos');
+        showNotification(apiErrorMessage(err, 'Ocurrió un error al guardar los datos'), 'error');
       }
     }
   };
@@ -123,8 +121,8 @@ export default function StaffManagement() {
       showNotification(`Cuenta de ${staff.name} ${!staff.is_active ? 'activada' : 'desactivada'}`);
       fetchStaff();
     } catch (err) {
-      console.error('Error toggling status', err);
-      showNotification('Error al cambiar el estado del usuario');
+      logError('staff:toggle', err);
+      showNotification(apiErrorMessage(err, 'Error al cambiar el estado del usuario'), 'error');
     }
   };
 
@@ -147,9 +145,10 @@ export default function StaffManagement() {
 
       <main className="flex-1 p-4 sm:p-8 md:p-12 relative overflow-y-auto max-w-5xl mx-auto w-full">
         <Toast
-          message={toastMessage}
-          isOpen={showToast}
-          onClose={() => setShowToast(false)}
+          message={toast?.message}
+          isOpen={!!toast}
+          type={toast?.type}
+          onClose={() => setToast(null)}
         />
 
         <div className="mt-2 sm:mt-6 pb-16">
@@ -174,8 +173,8 @@ export default function StaffManagement() {
             <form onSubmit={handleSubmit} noValidate>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                 <div>
-                  <label className="label-ledger">Nombre Completo *</label>
-                  <input
+                  <label htmlFor="staff-1" className="label-ledger">Nombre Completo *</label>
+                  <input id="staff-1"
                     className={`input-ledger ${formErrors.name ? 'border-[#7A2E2E]' : ''}`}
                     type="text"
                     name="name"
@@ -187,8 +186,8 @@ export default function StaffManagement() {
                 </div>
 
                 <div>
-                  <label className="label-ledger">Correo Electrónico *</label>
-                  <input
+                  <label htmlFor="staff-2" className="label-ledger">Correo Electrónico *</label>
+                  <input id="staff-2"
                     className={`input-ledger ${formErrors.email ? 'border-[#7A2E2E]' : ''}`}
                     type="email"
                     name="email"
@@ -200,23 +199,23 @@ export default function StaffManagement() {
                 </div>
 
                 <div>
-                  <label className="label-ledger">
+                  <label htmlFor="staff-3" className="label-ledger">
                     Contraseña {isEditing ? '(Dejar en blanco para mantener actual)' : '*'}
                   </label>
-                  <input
+                  <input id="staff-3"
                     className={`input-ledger ${formErrors.password ? 'border-[#7A2E2E]' : ''}`}
                     type="password"
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo 8 caracteres"
                   />
                   {formErrors.password && <p className="text-[#7A2E2E] font-mono text-xs mt-1">{formErrors.password}</p>}
                 </div>
 
                 <div>
-                  <label className="label-ledger">Rol en el Sistema *</label>
-                  <select
+                  <label htmlFor="staff-4" className="label-ledger">Rol en el Sistema *</label>
+                  <select id="staff-4"
                     className="input-ledger cursor-pointer"
                     name="role"
                     value={formData.role}
@@ -268,7 +267,7 @@ export default function StaffManagement() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left font-sans text-sm border-collapse">
+                <table className="w-full min-w-[640px] text-left font-sans text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-[#d1c5af] text-[#755b00] font-mono text-xs uppercase tracking-wider bg-[#eae8e3]">
                       <th className="p-3">Nombre</th>

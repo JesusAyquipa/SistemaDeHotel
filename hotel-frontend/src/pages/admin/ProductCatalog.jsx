@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
 import Toast from '../../components/Toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../../services/productService';
+import useDebouncedValue from '../../hooks/useDebouncedValue';
+import useEscapeKey from '../../hooks/useEscapeKey';
+import formatCurrency from '../../utils/formatCurrency';
+import { apiErrorMessage } from '../../utils/apiError';
+import logError from '../../utils/logError';
 
 const CATEGORIES = [
   { id: 'todos', label: 'Todos' },
@@ -17,10 +23,11 @@ export default function ProductCatalog() {
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState('todos');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   // Toast
-  const [toastMessage, setToastMessage] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,6 +38,7 @@ export default function ProductCatalog() {
     price: '',
     stock: 0,
     is_active: true,
+    tracks_stock: true,
   });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -40,26 +48,25 @@ export default function ProductCatalog() {
     try {
       const filters = {};
       if (categoryFilter !== 'todos') filters.category = categoryFilter;
-      if (search.trim()) filters.search = search;
+      if (debouncedSearch.trim()) filters.search = debouncedSearch.trim();
 
       const data = await getProducts(filters);
       setProducts(data || []);
     } catch (err) {
-      console.error('Error al cargar productos:', err);
-      showNotification('❌ Error al cargar los productos');
+      logError('products:list', err);
+      setToast({ type: 'error', message: apiErrorMessage(err, 'Error al cargar los productos') });
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter, search]);
+  }, [categoryFilter, debouncedSearch]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const showNotification = (msg) => {
-    setToastMessage(msg);
-    setShowToast(true);
-  };
+  const showNotification = (message, type = 'success') => setToast({ message, type });
+
+  useEscapeKey(() => { if (!submitting) setIsModalOpen(false); }, isModalOpen);
 
   const handleOpenCreateModal = () => {
     setEditingProduct(null);
@@ -69,6 +76,7 @@ export default function ProductCatalog() {
       price: '',
       stock: 10,
       is_active: true,
+      tracks_stock: true,
     });
     setFormError('');
     setIsModalOpen(true);
@@ -80,8 +88,9 @@ export default function ProductCatalog() {
       name: prod.name,
       category: prod.category,
       price: prod.price,
-      stock: prod.stock,
+      stock: prod.stock ?? 0,
       is_active: prod.is_active,
+      tracks_stock: prod.tracks_stock ?? true,
     });
     setFormError('');
     setIsModalOpen(true);
@@ -103,33 +112,33 @@ export default function ProductCatalog() {
     setSubmitting(true);
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.id, formData);
-        showNotification('✅ Producto actualizado correctamente');
+        await updateProduct(editingProduct.id, { ...formData, stock: formData.tracks_stock ? formData.stock : 0 });
+        showNotification('Producto actualizado correctamente');
       } else {
-        await createProduct(formData);
-        showNotification('✅ Producto creado correctamente');
+        await createProduct({ ...formData, stock: formData.tracks_stock ? formData.stock : 0 });
+        showNotification('Producto creado correctamente');
       }
       setIsModalOpen(false);
       fetchProducts();
     } catch (err) {
-      console.error('Error al guardar producto:', err);
-      const msg = err.response?.data?.message || 'Error al guardar el producto.';
-      setFormError(msg);
+      logError('products:save', err);
+      setFormError(apiErrorMessage(err, 'Error al guardar el producto.'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`¿Estás seguro de eliminar el producto "${name}"?`)) return;
-
+  const handleDelete = async () => {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    if (!target) return;
     try {
-      await deleteProduct(id);
-      showNotification('🗑️ Producto eliminado correctamente');
+      await deleteProduct(target.id);
+      showNotification('Producto eliminado correctamente');
       fetchProducts();
     } catch (err) {
-      console.error('Error al eliminar producto:', err);
-      showNotification('❌ No se pudo eliminar el producto');
+      logError('products:delete', err);
+      showNotification(apiErrorMessage(err, 'No se pudo eliminar el producto'), 'error');
     }
   };
 
@@ -180,14 +189,16 @@ export default function ProductCatalog() {
             </div>
 
             <div className="relative w-full md:w-64">
+              <label htmlFor="product-search" className="sr-only">Buscar producto</label>
               <input
-                type="text"
+                id="product-search"
+                type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nombre..."
                 className="w-full border-b border-[#78716c] pb-1 text-sm bg-transparent focus:outline-none pl-6"
               />
-              <span className="material-symbols-outlined absolute left-0 top-0 text-gray-400 text-lg">
+              <span className="material-symbols-outlined absolute left-0 top-0 text-gray-400 text-lg" aria-hidden="true">
                 search
               </span>
             </div>
@@ -208,7 +219,7 @@ export default function ProductCatalog() {
             </div>
           ) : (
             <div className="bg-white shadow-sm border border-gray-200 overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[720px] text-left border-collapse">
                 <thead>
                   <tr className="bg-[#f5f3ee] border-b border-gray-200 font-mono text-[11px] text-[#78716c] uppercase tracking-wider">
                     <th className="p-4">ID</th>
@@ -231,12 +242,16 @@ export default function ProductCatalog() {
                         </span>
                       </td>
                       <td className="p-4 text-right font-mono font-bold text-[#2d2d2a]">
-                        S/ {parseFloat(prod.price).toFixed(2)}
+                        {formatCurrency(prod.price)}
                       </td>
                       <td className="p-4 text-center font-mono text-xs">
-                        <span className={`px-2 py-0.5 rounded ${prod.stock > 5 ? 'bg-emerald-50 text-emerald-700 font-semibold' : prod.stock > 0 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700 font-bold'}`}>
-                          {prod.stock} unids
-                        </span>
+                        {prod.tracks_stock === false ? (
+                          <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600">Servicio</span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded ${prod.stock > 5 ? 'bg-emerald-50 text-emerald-700 font-semibold' : prod.stock > 0 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700 font-bold'}`}>
+                            {prod.stock} unids
+                          </span>
+                        )}
                       </td>
                       <td className="p-4 text-center">
                         <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded ${prod.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'}`}>
@@ -245,18 +260,22 @@ export default function ProductCatalog() {
                       </td>
                       <td className="p-4 text-right space-x-2">
                         <button
+                          type="button"
                           onClick={() => handleOpenEditModal(prod)}
                           className="p-1.5 text-gray-600 hover:text-[#c9a227] transition-colors"
                           title="Editar"
+                          aria-label={`Editar ${prod.name}`}
                         >
-                          <span className="material-symbols-outlined text-lg">edit</span>
+                          <span className="material-symbols-outlined text-lg" aria-hidden="true">edit</span>
                         </button>
                         <button
-                          onClick={() => handleDelete(prod.id, prod.name)}
+                          type="button"
+                          onClick={() => setDeleteTarget(prod)}
                           className="p-1.5 text-gray-600 hover:text-red-600 transition-colors"
                           title="Eliminar"
+                          aria-label={`Eliminar ${prod.name}`}
                         >
-                          <span className="material-symbols-outlined text-lg">delete</span>
+                          <span className="material-symbols-outlined text-lg" aria-hidden="true">delete</span>
                         </button>
                       </td>
                     </tr>
@@ -271,16 +290,18 @@ export default function ProductCatalog() {
       {/* Modal Crear / Editar */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-md p-6 shadow-xl border border-gray-200 animate-in fade-in duration-200">
+          <div role="dialog" aria-modal="true" aria-labelledby="product-modal-title" className="bg-white w-full max-w-md p-6 shadow-xl border border-gray-200 animate-in fade-in duration-200">
             <div className="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
-              <h2 className="font-serif text-xl font-bold text-[#2d2d2a]">
+              <h2 id="product-modal-title" className="font-serif text-xl font-bold text-[#2d2d2a]">
                 {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
               </h2>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined" aria-hidden="true">close</span>
               </button>
             </div>
 
@@ -292,10 +313,10 @@ export default function ProductCatalog() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
+                <label htmlFor="prod-1" className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
                   Nombre del Producto / Servicio *
                 </label>
-                <input
+                <input id="prod-1"
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -306,10 +327,10 @@ export default function ProductCatalog() {
               </div>
 
               <div>
-                <label className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
+                <label htmlFor="prod-2" className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
                   Categoría *
                 </label>
-                <select
+                <select id="prod-2"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full border border-gray-300 p-2 text-sm focus:outline-none focus:border-[#c9a227] capitalize"
@@ -324,10 +345,10 @@ export default function ProductCatalog() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
+                  <label htmlFor="prod-3" className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
                     Precio (S/) *
                   </label>
-                  <input
+                  <input id="prod-3"
                     type="number"
                     step="0.10"
                     min="0"
@@ -338,11 +359,12 @@ export default function ProductCatalog() {
                     required
                   />
                 </div>
+                {formData.tracks_stock ? (
                 <div>
-                  <label className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
+                  <label htmlFor="prod-4" className="block font-mono text-[11px] uppercase font-bold text-[#78716c] mb-1">
                     Stock Disponible
                   </label>
-                  <input
+                  <input id="prod-4"
                     type="number"
                     min="0"
                     value={formData.stock}
@@ -351,6 +373,22 @@ export default function ProductCatalog() {
                     className="w-full border border-gray-300 p-2 text-sm font-mono focus:outline-none focus:border-[#c9a227]"
                   />
                 </div>
+                ) : (
+                  <div className="font-mono text-[11px] text-[#78716c] self-end pb-2">Sin control de stock (servicio)</div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="tracks_stock"
+                  checked={formData.tracks_stock}
+                  onChange={(e) => setFormData({ ...formData, tracks_stock: e.target.checked })}
+                  className="accent-[#c9a227] w-4 h-4"
+                />
+                <label htmlFor="tracks_stock" className="text-xs font-mono text-[#4d4635] cursor-pointer">
+                  Controla stock (desmarcar para servicios)
+                </label>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
@@ -387,7 +425,17 @@ export default function ProductCatalog() {
         </div>
       )}
 
-      <Toast message={toastMessage} show={showToast} onClose={() => setShowToast(false)} />
+      <Toast message={toast?.message} isOpen={!!toast} type={toast?.type} onClose={() => setToast(null)} />
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Eliminar producto"
+        message={deleteTarget ? `¿Estás seguro de eliminar el producto "${deleteTarget.name}"?` : ''}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

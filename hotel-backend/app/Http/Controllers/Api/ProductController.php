@@ -46,6 +46,7 @@ class ProductController extends Controller
             'price'     => 'required|numeric|min:0',
             'stock'     => 'integer|min:0',
             'is_active' => 'boolean',
+            'tracks_stock' => 'boolean',
         ], [
             'name.required'     => 'El nombre del producto es obligatorio.',
             'category.required' => 'La categoría es obligatoria.',
@@ -53,6 +54,8 @@ class ProductController extends Controller
             'price.required'    => 'El precio es obligatorio.',
             'price.numeric'     => 'El precio debe ser un número.',
         ]);
+
+        $validated['tracks_stock'] ??= ! in_array($validated['category'], Product::SERVICE_CATEGORIES, true);
 
         $product = Product::create($validated);
 
@@ -86,6 +89,7 @@ class ProductController extends Controller
             'price'     => 'sometimes|numeric|min:0',
             'stock'     => 'sometimes|integer|min:0',
             'is_active' => 'sometimes|boolean',
+            'tracks_stock' => 'sometimes|boolean',
         ]);
 
         $product->update($validated);

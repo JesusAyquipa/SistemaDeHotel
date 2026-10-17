@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Restablecer Contraseña - Sheraton Lima Hotel</title>
+    <title>Restablecer Contraseña - {{ config('hotel.name') }}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&display=swap');
         
@@ -85,18 +85,18 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima Hotel</h1>
+            <h1>{{ config('hotel.name') }}</h1>
             <p>Seguridad de Cuenta</p>
         </div>
         
         <div class="content">
             <h2>Restablecer su Contraseña</h2>
             <p>
-                Hemos recibido una solicitud para restablecer la contraseña de su cuenta en Sheraton Lima Hotel. 
+                Hemos recibido una solicitud para restablecer la contraseña de su cuenta en {{ config('hotel.name') }}. 
                 Si usted no realizó esta solicitud, puede ignorar este correo de forma segura.
             </p>
             
-            <a href="http://localhost:5173/reset-password?token={{ $token }}&email={{ urlencode($email) }}" class="button">
+            <a href="{{ config('app.frontend_url') }}/reset-password?token={{ urlencode($token) }}&email={{ urlencode($email) }}" class="button">
                 Restablecer Contraseña
             </a>
             
@@ -106,7 +106,7 @@
         </div>
         
         <div class="footer">
-            <p style="margin: 0;">&copy; {{ date('Y') }} Sheraton Lima Hotel. TODOS LOS DERECHOS RESERVADOS.</p>
+            <p style="margin: 0;">&copy; {{ date('Y') }} {{ config('hotel.name') }}. TODOS LOS DERECHOS RESERVADOS.</p>
         </div>
     </div>
 </body>

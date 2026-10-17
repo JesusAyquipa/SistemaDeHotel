@@ -3,39 +3,44 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\BookingConfirmedMail;
 use App\Models\Booking;
-use App\Models\Guest;
 use App\Models\Payment;
-use App\Models\Room;
+use App\Services\Booking\BookingException;
+use App\Services\BookingPricingService;
+use App\Services\BookingService;
+use App\Services\CouponService;
+use App\Services\Payment\CardValidator;
 use App\Services\Payment\MockPaymentService;
 use App\Services\Payment\PaymentGatewayInterface;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Mail\BookingConfirmedMail;
+use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
-    private PaymentGatewayInterface $paymentGateway;
-
-    public function __construct(PaymentGatewayInterface $paymentGateway)
-    {
-        $this->paymentGateway = $paymentGateway;
+    public function __construct(
+        private PaymentGatewayInterface $paymentGateway,
+        private BookingService $bookings,
+        private CouponService $coupons,
+    ) {
     }
 
     /**
-     * Crea una intención de pago para el checkout de una reserva.
-     * Registra la reserva en estado 'pending_payment' y genera el intent de la pasarela.
+     * Checkout público: crea SIEMPRE una reserva `pending_payment` que retiene la
+     * habitación durante 30 minutos (expires_at) y la intención de pago con tarjeta.
+     * Los pagos en efectivo se registran solo en recepción (POST /api/bookings, staff).
      *
      * POST /api/payments/checkout-intent
      */
     public function createCheckoutIntent(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'room_id'         => 'required|exists:rooms,id',
+            'room_id'         => 'required|integer|exists:rooms,id',
             'check_in'        => 'required|date|after_or_equal:today',
             'check_out'       => 'required|date|after:check_in',
             'guest_name'      => ['required', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
@@ -45,217 +50,69 @@ class PaymentController extends Controller
             'document_number' => 'required|string|max:20',
             'guest_phone'     => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'notes'           => 'nullable|string|max:500',
-            'companions'      => 'nullable|array',
+            'companions'      => 'nullable|array|max:10',
             'companions.*.name' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
             'companions.*.surname' => ['required_with:companions', 'string', 'max:100', 'regex:/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/'],
-            'companions.*.document_type' => 'required_with:companions|string',
+            'companions.*.document_type' => 'required_with:companions|string|max:50',
             'companions.*.document_number' => 'required_with:companions|string|max:20',
             'companions.*.email' => 'nullable|email|max:150',
             'companions.*.phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
-            'coupon_code'     => 'nullable|string',
+            'coupon_code'     => 'nullable|string|max:50',
             'payment_method'  => 'nullable|string|in:card,cash,cash_later',
         ]);
 
-        $room = Room::findOrFail($validated['room_id']);
-
-        $companionsCount = isset($validated['companions']) ? count($validated['companions']) : 0;
-        $totalGuests = 1 + $companionsCount;
-
-        if ($totalGuests > $room->capacity) {
-            return response()->json([
-                'message' => 'La cantidad de personas excede la capacidad máxima de esta habitación.',
-                'errors'  => [
-                    'companions' => ["Capacidad excedida. La habitación permite un máximo de {$room->capacity} persona(s)."]
-                ]
-            ], 422);
-        }
-
-        // Calcular noches y monto total
-        $checkIn = Carbon::parse($validated['check_in'])->startOfDay();
-        $checkOut = Carbon::parse($validated['check_out'])->startOfDay();
-        $nights = max(1, $checkIn->diffInDays($checkOut));
-        $subTotal = $room->price_per_night * $nights;
-        $discountAmount = 0;
-        
-        $coupon = null;
-        if (!empty($validated['coupon_code'])) {
-            $coupon = \App\Models\Coupon::where('code', $validated['coupon_code'])->where('is_active', true)->first();
-            if ($coupon && $coupon->expires_at >= now() && (!$coupon->max_uses || $coupon->current_uses < $coupon->max_uses)) {
-                if ($coupon->discount_type === 'percentage') {
-                    $discountAmount = $subTotal * ($coupon->discount_value / 100);
-                } else {
-                    $discountAmount = $coupon->discount_value;
-                }
-            }
-        }
-        
-        $totalAmount = max(0, $subTotal - $discountAmount);
-
-        // Verificar disponibilidad (sin conflictos de fechas)
-        $isOverlapping = Booking::where('room_id', $room->id)
-            ->where(function ($query) use ($validated) {
-                $query->where('check_in', '<', $validated['check_out'])
-                      ->where('check_out', '>', $validated['check_in']);
-            })
-            ->whereIn('status', ['confirmed', 'checked_in', 'reservada', 'pending_payment'])
-            ->exists();
-
-        if ($isOverlapping) {
-            return response()->json([
-                'message' => 'La habitación seleccionada ya no se encuentra disponible en las fechas especificadas.',
-                'errors'  => [
-                    'dates' => ['Conflicto de fechas con una reserva existente.']
-                ]
-            ], 422);
-        }
-
         $paymentMethod = $validated['payment_method'] ?? 'card';
-
-        // Crear intención de pago en la pasarela SOLO si es tarjeta
-        $paymentIntent = null;
-        if ($paymentMethod === 'card') {
-            $paymentIntent = $this->paymentGateway->createPaymentIntent($totalAmount, 'PEN', [
-                'room_id'    => $room->id,
-                'guest_email' => $validated['guest_email'],
-            ]);
+        if ($paymentMethod !== 'card') {
+            return response()->json([
+                'message' => 'Los pagos en efectivo solo pueden registrarse en recepción.',
+            ], 422);
         }
 
-        // Crear reserva en estado pending_payment o confirmed dentro de una transacción
-        $booking = DB::transaction(function () use ($validated, $room, $totalAmount, $paymentIntent, $coupon, $discountAmount, $subTotal, $paymentMethod) {
-            // Obtener o registrar huésped
-            $guest = Guest::where('document_number', $validated['document_number'])
-                ->orWhere('email', $validated['guest_email'])
-                ->first();
+        $paymentIntent = null;
 
-            if (!$guest) {
-                $guest = Guest::create([
-                    'name'            => $validated['guest_name'],
-                    'surname'         => $validated['guest_surname'],
-                    'document_type'   => $validated['document_type'],
-                    'document_number' => $validated['document_number'],
-                    'phone'           => $validated['guest_phone'] ?? null,
-                    'email'           => $validated['guest_email'],
-                    'notes'           => $validated['notes'] ?? null,
-                ]);
-            } else {
-                $guest->update([
-                    'name'    => $validated['guest_name'],
-                    'surname' => $validated['guest_surname'],
-                    'phone'   => $validated['guest_phone'] ?? $guest->phone,
-                    'notes'   => $validated['notes'] ?? $guest->notes,
-                ]);
-            }
-
-            // Generar código único de reserva
-            do {
-                $bookingCode = 'RES-' . strtoupper(Str::random(8));
-            } while (Booking::where('booking_code', $bookingCode)->exists());
-
-            // Crear reserva con estado pendiente de pago
-            $newBooking = Booking::create([
-                'booking_code' => $bookingCode,
-                'guest_id'     => $guest->id,
-                'room_id'      => $room->id,
-                'check_in'     => $validated['check_in'],
-                'check_out'    => $validated['check_out'],
-                'total_amount' => $totalAmount,
-                'status'       => $paymentMethod === 'cash' ? 'confirmed' : 'pending_payment',
+        $result = $this->bookings->create($validated, false, function (Booking $booking, array $quote) use (&$paymentIntent) {
+            $paymentIntent = $this->paymentGateway->createPaymentIntent($quote['total'], 'PEN', [
+                'booking_code' => $booking->booking_code,
+                'room_id'      => $booking->room_id,
             ]);
-
-            // Guardar acompañantes si existen
-            if (!empty($validated['companions'])) {
-                foreach ($validated['companions'] as $companion) {
-                    \App\Models\BookingCompanion::create([
-                        'booking_id'      => $newBooking->id,
-                        'name'            => $companion['name'],
-                        'surname'         => $companion['surname'],
-                        'document_type'   => $companion['document_type'],
-                        'document_number' => $companion['document_number'],
-                        'email'           => $companion['email'] ?? null,
-                        'phone'           => $companion['phone'] ?? null,
-                    ]);
-
-                    // Registrar como huésped para futuras búsquedas
-                    if (!empty($companion['document_number'])) {
-                        $guestComp = Guest::where('document_number', $companion['document_number'])->first();
-                        if (!$guestComp) {
-                            Guest::create([
-                                'name'            => $companion['name'],
-                                'surname'         => $companion['surname'],
-                                'document_type'   => $companion['document_type'],
-                                'document_number' => $companion['document_number'],
-                                'email'           => $companion['email'] ?? null,
-                                'phone'           => $companion['phone'] ?? null,
-                            ]);
-                        }
-                    }
-                }
-            }
-
-            $transactionId = in_array($paymentMethod, ['cash', 'cash_later']) ? 'CASH-'.strtoupper(Str::random(8)) : $paymentIntent['transaction_id'];
-            $gatewayProvider = in_array($paymentMethod, ['cash', 'cash_later']) ? 'manual' : $paymentIntent['provider'];
-            $receiptNumber = $paymentMethod === 'cash' ? Payment::generateReceiptNumber() : null;
 
             Payment::create([
-                'booking_id'       => $newBooking->id,
-                'amount'           => $totalAmount,
-                'payment_method'   => $paymentMethod,
-                'status'           => $paymentMethod === 'cash' ? 'completed' : 'pending',
-                'transaction_id'   => $transactionId,
-                'gateway_provider' => $gatewayProvider,
+                'booking_id'       => $booking->id,
+                'amount'           => $quote['total'],
+                'payment_method'   => 'card',
+                'status'           => Payment::STATUS_PENDING,
+                'transaction_id'   => $paymentIntent['transaction_id'],
+                'gateway_provider' => $paymentIntent['provider'],
                 'currency'         => 'PEN',
-                'receipt_number'   => $receiptNumber,
-                'paid_at'          => $paymentMethod === 'cash' ? now() : null,
                 'payment_details'  => [
-                    'discount_amount' => $discountAmount,
-                    'coupon_code'     => $coupon ? $coupon->code : null,
-                    'sub_total'       => $subTotal
-                ]
+                    'discount_amount' => $quote['discount'],
+                    'coupon_code'     => $quote['coupon']['code'] ?? null,
+                    'sub_total'       => $quote['subtotal'],
+                ],
             ]);
-
-            // Incrementar current_uses del cupón si es válido
-            if ($coupon) {
-                $coupon->increment('current_uses');
-            }
-
-            return $newBooking;
         });
 
+        /** @var Booking $booking */
+        $booking = $result['booking'];
         $booking->load(['guest', 'room']);
-
-        if (in_array($paymentMethod, ['cash', 'cash_later'])) {
-            $payment = \App\Models\Payment::where('booking_id', $booking->id)->first();
-            return response()->json([
-                'message'        => $paymentMethod === 'cash' ? 'Reserva creada y pago registrado exitosamente.' : 'Reserva generada. Pago pendiente.',
-                'booking_code'   => $booking->booking_code,
-                'booking'        => $booking,
-                'receipt_number' => $payment->receipt_number,
-                'ticket_code'    => $payment->transaction_id,
-                'method'         => $paymentMethod,
-            ], 201);
-        }
+        // Respuesta pública: no exponer datos personales de la ficha del huésped.
+        $booking->guest?->setVisible(['id', 'name', 'surname', 'email']);
 
         return response()->json([
             'message'        => 'Intención de pago creada. Proceda con el pago seguro.',
             'booking_code'   => $booking->booking_code,
             'booking'        => $booking,
+            'expires_at'     => $booking->expires_at?->toIso8601String(),
             'client_secret'  => $paymentIntent['client_secret'],
             'transaction_id' => $paymentIntent['transaction_id'],
             'provider'       => $paymentIntent['provider'],
-            'summary'        => [
-                'nights'          => $nights,
-                'price_per_night' => $room->price_per_night,
-                'sub_total'       => $subTotal,
-                'discount'        => $discountAmount,
-                'total_amount'    => $totalAmount,
-                'currency'        => 'PEN',
-            ],
+            'summary'        => BookingService::summary($result['quote']),
         ], 201);
     }
 
     /**
-     * Procesa un pago simulado (solo en modo simulation).
-     * Confirma la reserva y genera el comprobante de pago.
+     * Paga con tarjeta (simulador) una reserva pending_payment existente.
+     * Idempotente: una reserva ya pagada responde 409.
      *
      * POST /api/payments/process-mock
      */
@@ -268,121 +125,166 @@ class PaymentController extends Controller
         }
 
         $validated = $request->validate([
-            'booking_code' => 'required|string|exists:bookings,booking_code',
-            'card_number'  => 'required|string|min:13|max:19',
+            'booking_code' => 'required|string|max:20',
+            'card_number'  => 'required|string|min:13|max:23',
             'card_expiry'  => ['required', 'string', 'regex:/^\d{2}\/\d{2}$/'],
-            'card_cvc'     => 'required|string|min:3|max:4',
+            'card_cvc'     => ['required', 'string', 'regex:/^\d{3,4}$/'],
             'card_holder'  => 'required|string|max:100',
         ]);
 
-        $booking = Booking::where('booking_code', $validated['booking_code'])
-            ->where('status', 'pending_payment')
-            ->firstOrFail();
+        $errors = CardValidator::errors($validated['card_number'], $validated['card_expiry'], $validated['card_cvc']);
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
 
-        $payment = Payment::where('booking_id', $booking->id)
-            ->where('status', 'pending')
-            ->firstOrFail();
+        $outcome = DB::transaction(function () use ($validated) {
+            $booking = Booking::where('booking_code', $validated['booking_code'])->lockForUpdate()->first();
 
-        /** @var MockPaymentService $gateway */
-        $gateway = $this->paymentGateway;
+            if (!$booking) {
+                throw new BookingException('Reserva no encontrada con el código proporcionado.', 404);
+            }
 
-        $result = $gateway->processPayment(
-            $validated['card_number'],
-            $validated['card_expiry'],
-            $validated['card_cvc'],
-            (float) $payment->amount,
-            $payment->currency ?? 'PEN',
-            ['booking_code' => $booking->booking_code]
-        );
+            if (in_array($booking->status, [Booking::STATUS_CONFIRMED, Booking::STATUS_CHECKED_IN, Booking::STATUS_CHECKED_OUT], true)) {
+                throw new BookingException('Esta reserva ya fue pagada.', 409);
+            }
 
-        if (!$result['success']) {
-            // Pago rechazado (tarjeta de prueba inválida)
+            if ($booking->status !== Booking::STATUS_PENDING_PAYMENT) {
+                throw new BookingException('La reserva no admite pagos en su estado actual.', 409);
+            }
+
+            if ($booking->isPendingExpired()) {
+                $this->expireBooking($booking);
+                return ['expired' => true];
+            }
+
+            $payment = Payment::where('booking_id', $booking->id)
+                ->where('status', Payment::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$payment) {
+                throw new BookingException('No hay un pago pendiente para esta reserva.', 409);
+            }
+
+            // Se reserva el uso del cupón antes de cobrar; se libera si el cobro falla.
+            if (!$this->coupons->consumeForBooking($booking)) {
+                throw new BookingException('El cupón aplicado ya no tiene usos disponibles. Inicie una nueva reserva.', 409);
+            }
+
+            $result = $this->paymentGateway->processPayment(
+                $validated['card_number'],
+                $validated['card_expiry'],
+                $validated['card_cvc'],
+                (float) $payment->amount,
+                $payment->currency ?? 'PEN',
+                ['booking_code' => $booking->booking_code]
+            );
+
+            if (empty($result['success'])) {
+                $this->coupons->releaseForBooking($booking);
+
+                $payment->update([
+                    'status'          => Payment::STATUS_FAILED,
+                    'transaction_id'  => $result['transaction_id'],
+                    'payment_details' => array_merge($payment->payment_details ?? [], [
+                        'decline_reason' => $result['decline_reason'] ?? 'unknown',
+                    ]),
+                ]);
+                $booking->update(['status' => Booking::STATUS_CANCELLED, 'expires_at' => null]);
+
+                return ['success' => false, 'result' => $result];
+            }
+
+            $receiptNumber = Payment::generateReceiptNumber();
             $payment->update([
-                'status'          => 'failed',
+                'status'          => Payment::STATUS_COMPLETED,
                 'transaction_id'  => $result['transaction_id'],
-                'payment_details' => ['decline_reason' => $result['decline_reason']],
+                'receipt_number'  => $receiptNumber,
+                'payment_details' => array_merge($payment->payment_details ?? [], $result['payment_details'] ?? []),
+                'paid_at'         => now(),
             ]);
 
-            // Cancelar la reserva
-            $booking->update(['status' => 'cancelled']);
+            $booking->update(['status' => Booking::STATUS_CONFIRMED, 'expires_at' => null]);
 
+            return ['success' => true, 'booking' => $booking, 'payment' => $payment->fresh(), 'result' => $result];
+        });
+
+        if (!empty($outcome['expired'])) {
             return response()->json([
-                'message' => $result['message'],
+                'message' => 'El tiempo para completar el pago expiró. Inicie una nueva reserva.',
+            ], 409);
+        }
+
+        if (!$outcome['success']) {
+            return response()->json([
+                'message' => $outcome['result']['message'] ?? 'El pago fue rechazado.',
                 'success' => false,
                 'status'  => 'failed',
             ], 422);
         }
 
-        // Pago exitoso: confirmar reserva y generar comprobante
-        $receiptNumber = Payment::generateReceiptNumber();
-
-        $mergedDetails = array_merge($payment->payment_details ?? [], $result['payment_details'] ?? []);
-
-        DB::transaction(function () use ($booking, $payment, $result, $receiptNumber, $mergedDetails) {
-            $payment->update([
-                'status'           => 'completed',
-                'transaction_id'   => $result['transaction_id'],
-                'receipt_number'   => $receiptNumber,
-                'payment_details'  => $mergedDetails,
-                'paid_at'          => now(),
-            ]);
-
-            $booking->update(['status' => 'confirmed']);
-            // No cambiamos el estado base de la habitación
-        });
-
+        /** @var Booking $booking */
+        $booking = $outcome['booking'];
+        /** @var Payment $payment */
+        $payment = $outcome['payment'];
         $booking->load(['guest', 'room', 'latestPayment', 'companions']);
 
-        // Enviar correo de confirmación de reserva
-        try {
-            Mail::to($booking->guest->email)->send(new BookingConfirmedMail($booking));
+        $this->sendConfirmationMails($booking);
 
-            if ($booking->companions) {
-                foreach ($booking->companions as $companion) {
-                    if (!empty($companion->email)) {
-                        Mail::to($companion->email)->send(new BookingConfirmedMail($booking));
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('No se pudo enviar el correo de confirmación post-pago: ' . $e->getMessage());
-        }
+        // Respuesta pública: sin documentos/teléfonos de huésped ni acompañantes.
+        $booking->unsetRelation('companions');
+        $booking->guest?->setVisible(['id', 'name', 'surname', 'email']);
 
         return response()->json([
             'message'        => '¡Pago procesado exitosamente! Tu reserva ha sido confirmada.',
             'success'        => true,
             'booking_code'   => $booking->booking_code,
-            'receipt_number' => $receiptNumber,
+            'receipt_number' => $payment->receipt_number,
             'booking'        => $booking,
             'payment'        => [
-                'transaction_id'  => $result['transaction_id'],
+                'transaction_id'  => $payment->transaction_id,
                 'amount'          => $payment->amount,
                 'currency'        => $payment->currency,
-                'payment_details' => $result['payment_details'],
-                'receipt_number'  => $receiptNumber,
-                'paid_at'         => now()->toIso8601String(),
+                'payment_details' => [
+                    'brand' => $payment->payment_details['brand'] ?? null,
+                    'last4' => $payment->payment_details['last4'] ?? null,
+                ],
+                'receipt_number'  => $payment->receipt_number,
+                'paid_at'         => $payment->paid_at?->toIso8601String(),
             ],
         ]);
     }
 
     /**
-     * Obtiene el comprobante de pago de una reserva confirmada.
+     * Comprobante de pago. Acceso: dueño o personal (token Sanctum), o ?email= igual al del huésped.
+     * En cualquier otro caso 404 (no revela existencia). No expone document_number y enmascara el teléfono.
+     *
      * GET /api/bookings/{code}/receipt
      */
-    public function getReceipt(string $code): JsonResponse
+    public function getReceipt(Request $request, string $code): JsonResponse
     {
-        $booking = Booking::with(['guest', 'room', 'payments'])
+        $booking = Booking::with(['guest', 'room'])
             ->where('booking_code', $code)
             ->first();
 
+        $notFound = response()->json(['message' => 'Reserva no encontrada con el código proporcionado.'], 404);
+
         if (!$booking) {
-            return response()->json([
-                'message' => 'Reserva no encontrada con el código proporcionado.',
-            ], 404);
+            return $notFound;
+        }
+
+        $user = $request->user() ?? $request->user('sanctum');
+        $email = $request->query('email');
+        $emailMatches = is_string($email) && $email !== '' && !empty($booking->guest?->email)
+            && hash_equals(mb_strtolower($booking->guest->email), mb_strtolower(trim($email)));
+
+        if (!$booking->isAccessibleBy($user) && !$emailMatches) {
+            return $notFound;
         }
 
         $payment = $booking->payments()
-            ->where('status', 'completed')
+            ->where('status', Payment::STATUS_COMPLETED)
+            ->where('amount', '>', 0)
             ->latest()
             ->first();
 
@@ -392,9 +294,8 @@ class PaymentController extends Controller
             ], 404);
         }
 
-        $checkIn = Carbon::parse($booking->check_in);
-        $checkOut = Carbon::parse($booking->check_out);
-        $nights = max(1, $checkIn->diffInDays($checkOut));
+        $nights = max(1, (int) Carbon::parse($booking->check_in)->diffInDays(Carbon::parse($booking->check_out)));
+        $pricing = $booking->pricing_details ?? [];
 
         return response()->json([
             'receipt' => [
@@ -403,40 +304,70 @@ class PaymentController extends Controller
                 'transaction_id'  => $payment->transaction_id,
                 'gateway'         => $payment->gateway_provider,
                 'hotel'           => [
-                    'name'    => 'Sheraton Lima Hotel & Convention Center',
-                    'address' => 'Av. Paseo de la República 170, Lima, Perú',
-                    'ruc'     => '20100128218',
-                    'phone'   => '+51 1 315-5000',
+                    'name'    => config('hotel.name'),
+                    'address' => config('hotel.address'),
+                    'ruc'     => config('hotel.ruc'),
+                    'phone'   => config('hotel.phone'),
                 ],
                 'guest'           => [
-                    'name'            => $booking->guest->name . ' ' . $booking->guest->surname,
-                    'document_type'   => $booking->guest->document_type,
-                    'document_number' => $booking->guest->document_number,
-                    'email'           => $booking->guest->email,
-                    'phone'           => $booking->guest->phone,
+                    'name'          => trim(($booking->guest->name ?? '') . ' ' . ($booking->guest->surname ?? '')),
+                    'document_type' => $booking->guest->document_type ?? null,
+                    'email'         => $booking->guest->email ?? null,
+                    'phone'         => $booking->guest?->maskedPhone(),
                 ],
                 'room'            => [
-                    'name'        => $booking->room->name,
-                    'room_number' => $booking->room->room_number,
-                    'bed_type'    => $booking->room->bed_type,
+                    'name'        => $booking->room->name ?? null,
+                    'room_number' => $booking->room->room_number ?? null,
+                    'bed_type'    => $booking->room->bed_type ?? null,
                 ],
                 'stay'            => [
                     'check_in'        => $booking->check_in,
                     'check_out'       => $booking->check_out,
                     'nights'          => $nights,
-                    'price_per_night' => $booking->room->price_per_night,
+                    'price_per_night' => $pricing['price_per_night'] ?? ($booking->room?->effective_price),
+                    'sub_total'       => $pricing['subtotal'] ?? null,
+                    'discount'        => (float) ($booking->discount_amount ?? 0),
+                    'total_amount'    => (float) $booking->total_amount,
                 ],
                 'payment'         => [
-                    'method'          => $payment->payment_method,
-                    'brand'           => $payment->payment_details['brand'] ?? null,
-                    'last4'           => $payment->payment_details['last4'] ?? null,
-                    'amount'          => $payment->amount,
-                    'currency'        => $payment->currency,
-                    'status'          => $payment->status,
-                    'paid_at'         => $payment->paid_at?->toIso8601String(),
+                    'method'   => $payment->payment_method,
+                    'brand'    => $payment->payment_details['brand'] ?? null,
+                    'last4'    => $payment->payment_details['last4'] ?? null,
+                    'amount'   => $payment->amount,
+                    'currency' => $payment->currency,
+                    'status'   => $payment->status,
+                    'paid_at'  => $payment->paid_at?->toIso8601String(),
                 ],
+                // Los precios incluyen IGV: se informa la porción incluida.
+                'tax'             => BookingPricingService::igvBreakdown((float) $payment->amount),
                 'issued_at'       => now()->toIso8601String(),
             ],
         ]);
+    }
+
+    private function expireBooking(Booking $booking): void
+    {
+        $this->coupons->releaseForBooking($booking);
+        Payment::where('booking_id', $booking->id)
+            ->where('status', Payment::STATUS_PENDING)
+            ->update(['status' => Payment::STATUS_CANCELLED]);
+        $booking->update(['status' => Booking::STATUS_EXPIRED]);
+    }
+
+    private function sendConfirmationMails(Booking $booking): void
+    {
+        try {
+            if (!empty($booking->guest?->email)) {
+                Mail::to($booking->guest->email)->send(new BookingConfirmedMail($booking));
+            }
+
+            foreach ($booking->companions ?? [] as $companion) {
+                if (!empty($companion->email)) {
+                    Mail::to($companion->email)->send(new BookingConfirmedMail($booking));
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('No se pudo enviar el correo de confirmación post-pago', ['booking_id' => $booking->id, 'error' => get_class($e)]);
+        }
     }
 }

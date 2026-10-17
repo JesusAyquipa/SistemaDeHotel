@@ -65,10 +65,14 @@ export const updateRoom = async (id, roomData) => {
  * Realiza un cambio rápido de estado de una habitación (1-click).
  * @param {number|string} id - ID de la habitación
  * @param {string} status - Nuevo estado (disponible, ocupada, mantenimiento, limpieza, reservada)
+ * @param {Object} [options] - { reason, force } (motivo obligatorio para mantenimiento; force solo admin)
  * @returns {Promise<Object>} Respuesta con el cambio de estado
  */
-export const updateRoomStatus = async (id, status) => {
-  const response = await api.patch(`/staff/rooms/${id}/status`, { status });
+export const updateRoomStatus = async (id, status, options = {}) => {
+  const payload = { status };
+  if (options.reason) payload.reason = options.reason;
+  if (options.force) payload.force = true;
+  const response = await api.patch(`/staff/rooms/${id}/status`, payload);
   return response.data;
 };
 

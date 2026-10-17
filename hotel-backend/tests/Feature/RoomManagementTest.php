@@ -6,8 +6,11 @@ use App\Events\RoomStatusUpdated;
 use App\Models\Booking;
 use App\Models\Guest;
 use App\Models\Room;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class RoomManagementTest extends TestCase
@@ -19,6 +22,15 @@ class RoomManagementTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        foreach (['admin', 'recepcionista', 'cliente'] as $roleName) {
+            Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
+        }
+
+        // Las rutas de gestión de habitaciones (CRUD) requieren rol admin
+        $admin = User::factory()->create(['is_active' => true]);
+        $admin->assignRole('admin');
+        Sanctum::actingAs($admin);
 
         $this->room = Room::create([
             'room_number'     => '101',
@@ -89,7 +101,7 @@ class RoomManagementTest extends TestCase
     {
         Event::fake([RoomStatusUpdated::class]);
 
-        $payload = ['status' => 'mantenimiento'];
+        $payload = ['status' => 'mantenimiento', 'reason' => 'Fuga en el baño'];
 
         $response = $this->patchJson("/api/staff/rooms/{$this->room->id}/status", $payload);
 
@@ -159,8 +171,8 @@ class RoomManagementTest extends TestCase
 
         $response = $this->deleteJson("/api/staff/rooms/{$this->room->id}");
 
-        $response->assertStatus(422)
-            ->assertJsonPath('message', 'No se puede eliminar la habitación porque tiene reservas vigentes asociadas.');
+        $response->assertStatus(409)
+            ->assertJsonPath('message', fn ($m) => str_contains($m, 'tiene reservas registradas'));
 
         $this->assertDatabaseHas('rooms', ['id' => $this->room->id]);
     }

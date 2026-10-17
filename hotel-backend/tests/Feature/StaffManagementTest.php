@@ -5,17 +5,26 @@ namespace Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 
 class StaffManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $admin;
+
     protected function setUp(): void
     {
         parent::setUp();
         Role::create(['name' => 'admin', 'guard_name' => 'web']);
         Role::create(['name' => 'recepcionista', 'guard_name' => 'web']);
+        Role::create(['name' => 'cliente', 'guard_name' => 'web']);
+
+        // La gestión de cuentas de personal es exclusiva del rol admin
+        $this->admin = User::factory()->create(['is_active' => true]);
+        $this->admin->assignRole('admin');
+        Sanctum::actingAs($this->admin);
     }
 
     public function test_can_list_staff_members(): void
@@ -35,7 +44,7 @@ class StaffManagementTest extends TestCase
         $payload = [
             'name' => 'Juan Perez',
             'email' => 'juan@hotel.com',
-            'password' => 'secret123',
+            'password' => 'secret1234',
             'role' => 'recepcionista',
             'is_active' => true,
         ];
@@ -86,5 +95,43 @@ class StaffManagementTest extends TestCase
         $response2 = $this->patchJson("/api/staff/{$user->id}/toggle-status");
         $response2->assertStatus(200)
                   ->assertJsonFragment(['is_active' => true]);
+    }
+
+    public function test_staff_password_must_have_at_least_8_characters(): void
+    {
+        $response = $this->postJson('/api/staff', [
+            'name' => 'Clave Corta',
+            'email' => 'corta@hotel.com',
+            'password' => 'abc123',
+            'role' => 'recepcionista',
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors(['password']);
+    }
+
+    public function test_invalid_role_filter_returns_422_instead_of_500(): void
+    {
+        $this->getJson('/api/staff?role=superusuario')
+             ->assertStatus(422)
+             ->assertJsonValidationErrors(['role']);
+    }
+
+    public function test_admin_cannot_deactivate_themselves(): void
+    {
+        $this->patchJson("/api/staff/{$this->admin->id}/toggle-status")
+             ->assertStatus(422);
+
+        $this->assertDatabaseHas('users', ['id' => $this->admin->id, 'is_active' => 1]);
+    }
+
+    public function test_admin_cannot_remove_own_admin_role(): void
+    {
+        $this->putJson("/api/staff/{$this->admin->id}", [
+            'name' => $this->admin->name,
+            'email' => $this->admin->email,
+            'role' => 'recepcionista',
+        ])->assertStatus(422);
+
+        $this->assertTrue($this->admin->fresh()->hasRole('admin'));
     }
 }

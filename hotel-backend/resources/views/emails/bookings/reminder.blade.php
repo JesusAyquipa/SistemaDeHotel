@@ -18,7 +18,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Sheraton Lima Hotel</h1>
+            <h1>{{ config('hotel.name') }}</h1>
             <p>Recordatorio de Estadía</p>
         </div>
         <div class="content">
@@ -27,7 +27,7 @@
             </div>
             
             <p>Hola <strong>{{ $booking->guest->name }}</strong>,</p>
-            <p>Te escribimos para recordarte que tu reserva en Sheraton Lima Hotel comienza el día de mañana. ¡Ya tenemos todo listo para tu llegada!</p>
+            <p>Te escribimos para recordarte que tu reserva en {{ config('hotel.name') }} comienza el día de mañana. ¡Ya tenemos todo listo para tu llegada!</p>
             
             <div class="details-box">
                 <p><strong>Código de Reserva:</strong> {{ $booking->booking_code }}</p>
@@ -36,11 +36,16 @@
                 <p><strong>Habitación:</strong> {{ $booking->room->room_number }}</p>
             </div>
             
+            <p><strong>Ahorra tiempo en recepción:</strong> completa tu pre check-in online (documento, hora de llegada y acompañantes) antes de llegar.</p>
+            <p style="text-align: center; margin: 20px 0;">
+                <a href="{{ $preCheckInUrl }}" style="display: inline-block; background-color: #14213D; color: #ffffff; padding: 12px 24px; border-radius: 4px; text-decoration: none; font-weight: bold;">Completar pre check-in</a>
+            </p>
+
             <p>Recuerda traer contigo una identificación válida para el registro. Si necesitas indicaciones para llegar o algún servicio especial, háznoslo saber.</p>
             <p>¡Esperamos que tengas un viaje seguro!</p>
         </div>
         <div class="footer">
-            <p>&copy; {{ date('Y') }} Sheraton Lima Hotel. Todos los derechos reservados.</p>
+            <p>&copy; {{ date('Y') }} {{ config('hotel.name') }}. Todos los derechos reservados.</p>
         </div>
     </div>
 </body>

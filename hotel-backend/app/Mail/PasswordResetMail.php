@@ -7,7 +7,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class PasswordResetMail extends Mailable
+class PasswordResetMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -19,6 +19,8 @@ class PasswordResetMail extends Mailable
      */
     public function __construct($token, $email)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->token = $token;
         $this->email = $email;
     }
@@ -28,7 +30,7 @@ class PasswordResetMail extends Mailable
      */
     public function build()
     {
-        return $this->subject('Restablecer contraseña - Sheraton Lima Hotel')
+        return $this->subject('Restablecer contraseña - ' . config('hotel.name'))
                     ->view('emails.auth.password_reset');
     }
 }

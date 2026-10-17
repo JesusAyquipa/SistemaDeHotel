@@ -43,6 +43,12 @@ return [
     */
     'payment_gateway' => env('PAYMENT_GATEWAY', 'simulation'),
 
+    // Webhook de pagos: header X-Signature = hex(hmac_sha256(raw body, webhook_secret)).
+    // Sin secreto configurado, el webhook rechaza todas las peticiones (401).
+    'payment' => [
+        'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET'),
+    ],
+
     'stripe' => [
         'key'            => env('STRIPE_PUBLISHABLE_KEY', ''),
         'secret'         => env('STRIPE_SECRET_KEY', ''),

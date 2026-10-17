@@ -1,82 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
 import NewSeasonModal from '../../components/staff/NewSeasonModal';
 import NewCouponModal from '../../components/staff/NewCouponModal';
 import api from '../../services/api';
 import Toast from '../../components/Toast';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import CancellationPolicySettings from '../../components/staff/CancellationPolicySettings';
 import { useAuth } from '../../context/AuthContext';
+import { apiErrorMessage } from '../../utils/apiError';
+import logError from '../../utils/logError';
+import formatCurrency from '../../utils/formatCurrency';
 
 export default function SettingsDashboard() {
   const [seasons, setSeasons] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [isSeasonModalOpen, setIsSeasonModalOpen] = useState(false);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
-  
+
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('admin');
-  
-  const [toastMessage, setToastMessage] = useState(null);
-  
-  useEffect(() => {
-    fetchSettings();
-  }, []);
 
-  const fetchSettings = async () => {
+  const [toast, setToast] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null); // { kind: 'season'|'coupon', id }
+
+  const notify = (message, type = 'success') => setToast({ message, type });
+
+  const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.get('/settings');
-      setSeasons(res.data.seasons);
-      setCoupons(res.data.coupons);
-    } catch (error) {
-      setToastMessage('Error cargando configuración');
+      setSeasons(res.data.seasons || []);
+      setCoupons(res.data.coupons || []);
+    } catch (err) {
+      logError('settings:fetch', err);
+      setToast({ type: 'error', message: apiErrorMessage(err, 'Error cargando configuración') });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const handleSaveSeason = async (seasonData) => {
     try {
       await api.post('/settings/seasons', seasonData);
-      setToastMessage('Temporada agregada exitosamente');
+      notify('Temporada agregada exitosamente');
       fetchSettings();
       setIsSeasonModalOpen(false);
     } catch (err) {
-      setToastMessage('Error guardando temporada');
+      logError('settings:season', err);
+      notify(apiErrorMessage(err, 'Error guardando temporada'), 'error');
     }
   };
 
   const handleSaveCoupon = async (couponData) => {
     try {
       await api.post('/settings/coupons', couponData);
-      setToastMessage('Cupón agregado exitosamente');
+      notify('Cupón agregado exitosamente');
       fetchSettings();
       setIsCouponModalOpen(false);
     } catch (err) {
-      setToastMessage('Error guardando cupón');
+      logError('settings:coupon', err);
+      notify(apiErrorMessage(err, 'Error guardando cupón'), 'error');
     }
   };
 
-  const deleteSeason = async (id) => {
-    if (!window.confirm('¿Eliminar esta temporada?')) return;
+  const confirmDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    const isSeason = target.kind === 'season';
     try {
-      await api.delete(`/settings/seasons/${id}`);
-      setToastMessage('Temporada eliminada');
+      await api.delete(`/settings/${isSeason ? 'seasons' : 'coupons'}/${target.id}`);
+      notify(isSeason ? 'Temporada eliminada' : 'Cupón eliminado');
       fetchSettings();
-    } catch(e) {
-      setToastMessage('Error eliminando temporada');
-    }
-  };
-
-  const deleteCoupon = async (id) => {
-    if (!window.confirm('¿Eliminar este cupón?')) return;
-    try {
-      await api.delete(`/settings/coupons/${id}`);
-      setToastMessage('Cupón eliminado');
-      fetchSettings();
-    } catch(e) {
-      setToastMessage('Error eliminando cupón');
+    } catch (err) {
+      logError('settings:delete', err);
+      notify(apiErrorMessage(err, isSeason ? 'Error eliminando temporada' : 'Error eliminando cupón'), 'error');
     }
   };
 
@@ -87,27 +91,32 @@ export default function SettingsDashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-[#e5e4de] text-[#1b1c19] font-sans">
+    <div className="flex flex-col md:flex-row h-screen bg-[#e5e4de] text-[#1b1c19] font-sans">
       <StaffSidebar />
-      {toastMessage && (
-        <Toast message={toastMessage} onClose={() => setToastMessage(null)} type={toastMessage.includes('Error') ? 'error' : 'success'} />
-      )}
-      
+      <Toast message={toast?.message} isOpen={!!toast} type={toast?.type} onClose={() => setToast(null)} />
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title={pendingDelete?.kind === 'season' ? 'Eliminar temporada' : 'Eliminar cupón'}
+        message={pendingDelete?.kind === 'season' ? '¿Eliminar esta temporada?' : '¿Eliminar este cupón?'}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+
       <div className="flex-1 overflow-y-auto p-8 lg:p-12">
         <div className="max-w-5xl mx-auto flex flex-col gap-10 animate-fadeIn">
-          
+
           <div className="flex justify-between items-end">
             <div>
               <h1 className="font-serif text-3xl font-bold text-[#1b1c19] mb-1 tracking-tight">Configuración General</h1>
               <p className="font-mono text-sm text-[#4d4635] tracking-wide">Gestión de Temporadas y Cupones Promocionales</p>
             </div>
-            {isAdmin && (
-              <button className="bg-[#987d35] hover:bg-[#7a642a] text-white font-mono text-xs font-bold uppercase tracking-widest px-6 py-2.5 transition-colors shadow-sm flex items-center gap-2">
-                <span className="material-symbols-outlined text-sm">save</span>
-                Guardar Cambios
-              </button>
-            )}
+            {loading && <span className="font-mono text-xs text-[#78716c] animate-pulse" role="status">Cargando...</span>}
           </div>
+
+          {/* Política de cancelación y no-show (SHE-028) */}
+          <CancellationPolicySettings canEdit={isAdmin} onNotify={notify} />
 
           {/* Temporadas */}
           <div className="bg-[#fcfcfc] border-l-4 border-l-[#987d35] shadow-sm rounded-r-md p-6 relative">
@@ -117,7 +126,7 @@ export default function SettingsDashboard() {
                   <h2 className="font-serif text-xl font-bold text-[#2d2d2a]">Gestión de Temporadas</h2>
                 </div>
                 {isAdmin && (
-                  <button 
+                  <button
                     onClick={() => setIsSeasonModalOpen(true)}
                     className="bg-transparent border border-[#987d35] text-[#987d35] hover:bg-[#f5f3ee] transition-colors font-mono text-[10px] uppercase font-bold tracking-widest px-4 py-1.5 flex items-center gap-1"
                   >
@@ -138,7 +147,12 @@ export default function SettingsDashboard() {
 
                {seasons.map(s => (
                  <div key={s.id} className="grid grid-cols-5 items-center font-sans text-sm text-[#4d4635] p-3 border-b border-[#eae8e3] hover:bg-[#fbf9f4] transition-colors">
-                   <div className="col-span-1 font-bold text-[#1b1c19]">{s.name}</div>
+                   <div className="col-span-1 font-bold text-[#1b1c19]">
+                     {s.name}
+                     <span className="block font-mono text-[10px] font-normal text-[#78716c]">
+                       {s.room_type?.name ? `Solo: ${s.room_type.name}` : 'Todos los tipos'}
+                     </span>
+                   </div>
                    <div className="col-span-1">{formatDate(s.start_date)} - {formatDate(s.end_date)}</div>
                    <div className="col-span-1 text-center font-mono text-[#ba1a1a] font-bold">
                      {s.rate_adjustment > 0 ? `+${s.rate_adjustment}%` : `${s.rate_adjustment}%`}
@@ -151,8 +165,7 @@ export default function SettingsDashboard() {
                    </div>
                    {isAdmin && (
                      <div className="col-span-1 flex justify-end gap-2">
-                       <button className="text-[#a39f96] hover:text-[#987d35] transition-colors"><span className="material-symbols-outlined text-[18px]">edit</span></button>
-                       <button onClick={() => deleteSeason(s.id)} className="text-[#a39f96] hover:text-[#ba1a1a] transition-colors"><span className="material-symbols-outlined text-[18px]">delete</span></button>
+                       <button type="button" onClick={() => setPendingDelete({ kind: 'season', id: s.id })} aria-label="Eliminar temporada" className="text-[#a39f96] hover:text-[#ba1a1a] transition-colors"><span className="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span></button>
                      </div>
                    )}
                  </div>
@@ -169,7 +182,7 @@ export default function SettingsDashboard() {
                   <h2 className="font-serif text-xl font-bold text-[#2d2d2a]">Cupones Promocionales</h2>
                 </div>
                 {isAdmin && (
-                  <button 
+                  <button
                     onClick={() => setIsCouponModalOpen(true)}
                     className="bg-transparent border border-[#525e7d] text-[#525e7d] hover:bg-[#f0f4f8] transition-colors font-mono text-[10px] uppercase font-bold tracking-widest px-4 py-1.5 flex items-center gap-1"
                   >
@@ -195,7 +208,7 @@ export default function SettingsDashboard() {
                  let statusText = 'Activo';
                  let statusColor = 'bg-[#e5efff] text-[#0047b3]';
                  let dotColor = 'bg-[#0047b3]';
-                 
+
                  if (isExpired) {
                     statusText = 'Expirado';
                     statusColor = 'bg-[#ffdad6] text-[#ba1a1a]';
@@ -205,14 +218,14 @@ export default function SettingsDashboard() {
                     statusColor = 'bg-[#e4e2dd] text-[#78716c]';
                     dotColor = 'bg-[#78716c]';
                  }
-                 
+
                  return (
                  <div key={c.id} className="grid grid-cols-6 items-center font-sans text-sm text-[#4d4635] p-3 border-b border-[#eae8e3] hover:bg-[#fbf9f4] transition-colors">
                    <div className="col-span-1 font-bold">
                      <span className="bg-[#f5f3ee] text-[#7a642a] border border-[#d1c5af] px-2 py-0.5 rounded font-mono text-xs">{c.code}</span>
                    </div>
                    <div className="col-span-1 text-center font-bold text-[#987d35]">
-                     {c.discount_type === 'percentage' ? `${parseFloat(c.discount_value)}%` : `$${parseFloat(c.discount_value).toFixed(2)} USD`}
+                     {c.discount_type === 'percentage' ? `${parseFloat(c.discount_value)}%` : formatCurrency(c.discount_value)}
                    </div>
                    <div className="col-span-1 text-center">{formatDate(c.expires_at)}</div>
                    <div className="col-span-1 flex items-center justify-center gap-2">
@@ -233,8 +246,7 @@ export default function SettingsDashboard() {
                    </div>
                    {isAdmin && (
                      <div className="col-span-1 flex justify-end gap-2">
-                       <button className="text-[#a39f96] hover:text-[#525e7d] transition-colors"><span className="material-symbols-outlined text-[18px]">edit</span></button>
-                       <button onClick={() => deleteCoupon(c.id)} className="text-[#a39f96] hover:text-[#ba1a1a] transition-colors"><span className="material-symbols-outlined text-[18px]">delete</span></button>
+                       <button type="button" onClick={() => setPendingDelete({ kind: 'coupon', id: c.id })} aria-label="Eliminar cupón" className="text-[#a39f96] hover:text-[#ba1a1a] transition-colors"><span className="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span></button>
                      </div>
                    )}
                  </div>
@@ -242,10 +254,10 @@ export default function SettingsDashboard() {
                {coupons.length === 0 && <div className="text-center p-4 text-sm text-gray-400">Sin cupones registrados.</div>}
              </div>
           </div>
-          
+
         </div>
       </div>
-      
+
       <NewSeasonModal isOpen={isSeasonModalOpen} onClose={() => setIsSeasonModalOpen(false)} onSave={handleSaveSeason} />
       <NewCouponModal isOpen={isCouponModalOpen} onClose={() => setIsCouponModalOpen(false)} onSave={handleSaveCoupon} />
     </div>

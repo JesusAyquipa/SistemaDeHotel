@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class BookingConfirmedMail extends Mailable
+class BookingConfirmedMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
@@ -21,6 +21,8 @@ class BookingConfirmedMail extends Mailable
      */
     public function __construct(Booking $booking)
     {
+        // Se envía por la cola y solo después de confirmar la transacción (SHE-038).
+        $this->afterCommit();
         $this->booking = $booking;
     }
 
@@ -30,7 +32,7 @@ class BookingConfirmedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Confirmación de Reserva - Sheraton Lima Hotel',
+            subject: 'Confirmación de Reserva - ' . config('hotel.name'),
         );
     }
 

@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+/public/profiles
+/.phpunit.cache
+.env.*
+!.env.example

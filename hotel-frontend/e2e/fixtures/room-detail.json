@@ -1,0 +1,22 @@
+{
+  "room": {
+    "id": 101,
+    "name": "Suite Presidencial Colonial",
+    "room_number": "501",
+    "bed_type": "king",
+    "type": "suite",
+    "room_type": { "id": 1, "name": "Suite", "slug": "suite" },
+    "capacity": 2,
+    "size_m2": 48,
+    "price_per_night": 520,
+    "description": "Suite con vista a la Plaza San Martín, sala de estar y baño de mármol.",
+    "image_url": null,
+    "images": [],
+    "amenities": [
+      { "key": "wifi", "label": "Wi-Fi de alta velocidad", "icon": "wifi" },
+      { "key": "minibar", "label": "Frigobar", "icon": "kitchen" }
+    ],
+    "season_price_today": null,
+    "seasons": []
+  }
+}
