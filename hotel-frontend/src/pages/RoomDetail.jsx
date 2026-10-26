@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { useAuth } from '../context/AuthContext';
@@ -146,7 +146,6 @@ function RoomDetailSkeleton() {
 export default function RoomDetail() {
   const { id } = useParams();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [room, setRoom] = useState(null);
@@ -269,13 +268,8 @@ export default function RoomDetail() {
 
   const nights = checkIn && checkOut ? nightsBetween(toYmd(checkIn), toYmd(checkOut)) : 0;
 
-  const openCheckout = () => {
-    if (!user) {
-      navigate('/login', { state: { from: location } });
-      return;
-    }
-    setCheckoutOpen(true);
-  };
+  // Se puede reservar como invitado: sin sesión, el checkout pide verificar el correo con un código (SHE-026).
+  const openCheckout = () => setCheckoutOpen(true);
 
   /* --------------------------- Estados especiales --------------------------- */
   if (loading) {
@@ -523,7 +517,10 @@ export default function RoomDetail() {
                   {checkIn && checkOut ? 'Reservar estas fechas' : 'Reservar ahora'}
                 </button>
                 {!user && (
-                  <p className="font-mono text-[10px] text-[#4d4635] text-center">Debes iniciar sesión para completar la reserva.</p>
+                  <p className="font-mono text-[10px] text-[#4d4635] text-center">
+                    Puedes reservar como invitado: te enviaremos un código a tu correo para verificarlo.{' '}
+                    <Link to="/login" state={{ from: location }} className="underline text-[#755b00]">Iniciar sesión</Link>
+                  </p>
                 )}
               </div>
             </aside>

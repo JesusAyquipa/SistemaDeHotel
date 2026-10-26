@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import PublicHeader from '../components/PublicHeader';
 import PublicFooter from '../components/PublicFooter';
 import AvailabilitySearch from '../components/AvailabilitySearch';
@@ -25,9 +23,6 @@ const DEFAULT_FILTERS = {
 };
 
 export default function RoomsListing() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,13 +197,7 @@ export default function RoomsListing() {
                   <RoomCard
                     key={room.id}
                     room={room}
-                    onSelect={(selectedRoom) => {
-                      if (!user) {
-                        navigate('/login', { state: { from: location } });
-                      } else {
-                        setSelectedRoomForBooking(selectedRoom);
-                      }
-                    }}
+                    onSelect={(selectedRoom) => setSelectedRoomForBooking(selectedRoom)}
                   />
                 ))}
               </div>

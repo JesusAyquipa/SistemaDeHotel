@@ -35,18 +35,6 @@ export const getReportStats = async (dateRange = '30_days') => {
   return response.data;
 };
 
-/**
- * Historial de cierres de caja con filtros (SHE-015).
- * @param {Object} filters { user_id, date_from, date_to, status, page }
- * @returns {Promise<Object>}
- */
-export const getCashRegisterClosures = async (filters = {}) => {
-  const response = await api.get('/staff/reports/closures', {
-    params: filters,
-  });
-  return response.data;
-};
-
 export default {
   getDashboardReports,
   getReportStats,
