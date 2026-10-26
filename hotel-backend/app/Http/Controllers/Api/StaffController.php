@@ -20,8 +20,18 @@ class StaffController extends Controller
     {
         $filters = $request->validate([
             'search' => 'nullable|string|max:100',
-            'role'   => 'nullable|string|in:admin,recepcionista,cliente',
+            'role'   => 'nullable|string|max:60',
         ]);
+
+        $roles = [];
+        if (!empty($filters['role'])) {
+            $roles = array_values(array_unique(array_filter(array_map('trim', explode(',', $filters['role'])))));
+            foreach ($roles as $r) {
+                if (!in_array($r, ['admin', 'recepcionista', 'cliente'], true)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['role' => ['Rol no válido.']]);
+                }
+            }
+        }
 
         $query = User::with('roles');
 
@@ -35,8 +45,8 @@ class StaffController extends Controller
         }
 
         // Filtro por rol
-        if (!empty($filters['role'])) {
-            $query->role($filters['role']);
+        if ($roles) {
+            $query->role($roles);
         }
 
         $staff = $query->latest()->get()->map(function ($user) {

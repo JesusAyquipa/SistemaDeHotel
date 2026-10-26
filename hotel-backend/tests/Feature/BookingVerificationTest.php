@@ -123,6 +123,18 @@ class BookingVerificationTest extends TestCase
         Mail::assertQueued(BookingVerificationCodeMail::class, 4);
     }
 
+    public function test_resend_does_not_delete_a_verified_unconsumed_token(): void
+    {
+        $token = $this->verificationTokenFor('lucia@example.com');
+        $verified = BookingVerification::where('email', 'lucia@example.com')->firstOrFail();
+
+        $this->postJson('/api/booking-verification/send', ['email' => 'lucia@example.com'])->assertOk();
+
+        $this->assertNotNull(BookingVerification::find($verified->id));
+        $this->assertSame(2, BookingVerification::where('email', 'lucia@example.com')->count());
+        $this->assertNotNull(BookingVerification::where('token_hash', BookingVerificationService::hashToken($token))->first());
+    }
+
     public function test_resend_invalidates_the_previous_code(): void
     {
         $first = $this->sendAndCapture('lucia@example.com');

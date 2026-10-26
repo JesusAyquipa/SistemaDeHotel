@@ -37,6 +37,7 @@ class Payment extends Model
         'payment_details',
         'is_reconciled',
         'cash_register_closure_id',
+        'cash_register_session_id',
     ];
 
     protected $casts = [
@@ -54,6 +55,11 @@ class Payment extends Model
     public function closure()
     {
         return $this->belongsTo(CashRegisterClosure::class, 'cash_register_closure_id');
+    }
+
+    public function cashSession()
+    {
+        return $this->belongsTo(CashRegisterSession::class, 'cash_register_session_id');
     }
 
     /**

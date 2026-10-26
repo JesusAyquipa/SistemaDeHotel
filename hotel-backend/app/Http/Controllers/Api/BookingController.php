@@ -19,6 +19,7 @@ use App\Services\Booking\BookingException;
 use App\Services\BookingAvailabilityService;
 use App\Services\BookingPricingService;
 use App\Services\BookingService;
+use App\Services\CashSessionService;
 use App\Services\CouponService;
 use App\Services\FolioCalculator;
 use App\Services\Payment\CardValidator;
@@ -94,9 +95,13 @@ class BookingController extends Controller
         $paymentMethod = $extra['payment_method'] ?? 'cash_later';
         $cashPayment = null;
 
-        $result = $this->bookings->create($data, true, function (Booking $booking, array $quote) use ($paymentMethod, &$cashPayment) {
+        $staffId = (int) $request->user()->id;
+
+        $result = $this->bookings->create($data, true, function (Booking $booking, array $quote) use ($paymentMethod, $staffId, &$cashPayment) {
             if ($paymentMethod === 'cash' && $quote['total'] > 0) {
+                $session = CashSessionService::requireOpenSessionLocked($staffId);
                 $cashPayment = Payment::create([
+                    'cash_register_session_id' => $session->id,
                     'booking_id'       => $booking->id,
                     'amount'           => $quote['total'],
                     'payment_method'   => 'Efectivo',
@@ -251,7 +256,11 @@ class BookingController extends Controller
 
         $amount = round((float) $validated['amount'], 2);
 
-        [$payment, $balance] = DB::transaction(function () use ($id, $amount, $validated) {
+        $staffId = (int) $request->user()->id;
+
+        [$payment, $balance] = DB::transaction(function () use ($id, $amount, $validated, $staffId) {
+            $session = CashSessionService::requireOpenSessionLocked($staffId);
+
             $booking = Booking::whereKey($id)->lockForUpdate()->first();
             if (!$booking) {
                 throw new BookingException('Reserva no encontrada.', 404);
@@ -276,6 +285,7 @@ class BookingController extends Controller
 
             $payment = Payment::create([
                 'booking_id'       => $booking->id,
+                'cash_register_session_id' => $session->id,
                 'amount'           => $amount,
                 'payment_method'   => $validated['method'],
                 'status'           => Payment::STATUS_COMPLETED,

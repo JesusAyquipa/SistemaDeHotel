@@ -47,7 +47,8 @@ class BookingVerificationService
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
         DB::transaction(function () use ($email, $code) {
-            BookingVerification::where('email', $email)->whereNull('consumed_at')->delete();
+            // Solo códigos pendientes: un token ya verificado (aún sin consumir) no se destruye.
+            BookingVerification::where('email', $email)->whereNull('consumed_at')->whereNull('token_hash')->delete();
 
             BookingVerification::create([
                 'email'           => $email,

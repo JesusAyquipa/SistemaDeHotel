@@ -39,6 +39,21 @@ class StaffManagementTest extends TestCase
                  ->assertJsonFragment(['name' => 'Maria Recepcion']);
     }
 
+    public function test_can_filter_staff_by_comma_separated_roles(): void
+    {
+        $r = User::factory()->create(['name' => 'Rita Recep']);
+        $r->assignRole('recepcionista');
+        $c = User::factory()->create(['name' => 'Carlos Cliente']);
+        $c->assignRole('cliente');
+
+        $names = collect($this->getJson('/api/staff?role=admin,recepcionista')->assertOk()->json('data'))->pluck('name');
+        $this->assertTrue($names->contains('Rita Recep'));
+        $this->assertTrue($names->contains($this->admin->name));
+        $this->assertFalse($names->contains('Carlos Cliente'));
+
+        $this->getJson('/api/staff?role=admin,hacker')->assertStatus(422);
+    }
+
     public function test_can_create_staff_member(): void
     {
         $payload = [
