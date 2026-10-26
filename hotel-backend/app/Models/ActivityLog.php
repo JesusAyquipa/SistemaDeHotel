@@ -23,6 +23,7 @@ class ActivityLog extends Model
         'Payment' => 'Pago',
         'Charge'  => 'Consumo',
         'Invoice' => 'Comprobante',
+        'CashRegisterSession' => 'Caja',
     ];
 
     protected $fillable = [

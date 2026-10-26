@@ -5,8 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\CashRegisterClosure;
+use App\Models\CashRegisterSession;
 use App\Models\Payment;
 use App\Models\Room;
+use App\Services\ActivityLogger;
+use App\Services\Booking\BookingException;
+use App\Services\CashSessionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -165,10 +169,13 @@ class ReportController extends Controller
         ]);
     }
 
+
     /**
-     * Cierre de caja. Los totales se calculan en el servidor a partir de los pagos
-     * completados no conciliados hasta el momento del cierre; solo esos pagos se concilian.
-     * expected_amount / difference enviados por el cliente se ignoran.
+     * Cierre de caja (SHE-014). Requiere una sesión de caja abierta del usuario.
+     * Los totales se calculan en el servidor a partir de los pagos completados no
+     * conciliados desde la apertura hasta el cierre; solo esos pagos se concilian.
+     * Esperado = monto de apertura + pagos de la sesión. expected_amount / difference
+     * enviados por el cliente se ignoran.
      * POST /api/staff/reports/close-register
      */
     public function closeRegister(Request $request): JsonResponse
@@ -182,11 +189,17 @@ class ReportController extends Controller
         $user = $request->user();
         $closedAt = now();
 
-        $closure = DB::transaction(function () use ($validated, $user, $closedAt) {
-            $payments = Payment::where('is_reconciled', false)
-                ->where('status', Payment::STATUS_COMPLETED)
-                ->where('amount', '>', 0)
-                ->where('created_at', '<=', $closedAt)
+        [$closure, $session] = DB::transaction(function () use ($validated, $user, $closedAt) {
+            $session = CashRegisterSession::where('user_id', $user->id)
+                ->where('status', CashRegisterSession::STATUS_OPEN)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$session) {
+                throw new BookingException('Debes abrir caja antes de cerrarla', 422);
+            }
+
+            $payments = CashSessionService::sessionPaymentsQuery($session, $closedAt)
                 ->lockForUpdate()
                 ->get(['id', 'amount', 'payment_method', 'created_at']);
 
@@ -195,24 +208,22 @@ class ReportController extends Controller
                 $byMethod[$p->payment_method] = round(($byMethod[$p->payment_method] ?? 0) + (float) $p->amount, 2);
             }
 
-            $cashExpected = round($payments->whereIn('payment_method', Payment::CASH_METHODS)->sum('amount'), 2);
-            $voucherExpected = round($payments->whereIn('payment_method', Payment::VOUCHER_METHODS)->sum('amount'), 2);
-            $expected = round((float) $payments->sum('amount'), 2);
+            $opening = round((float) $session->opening_amount, 2);
+            $classified = CashSessionService::classify($payments);
+            $expected = round($opening + (float) $payments->sum('amount'), 2);
             $counted = round((float) $validated['cash_amount'] + (float) $validated['voucher_amount'], 2);
-
-            $lastClosure = CashRegisterClosure::latest('closed_at')->first();
-            $openedAt = $lastClosure?->closed_at ?? ($payments->min('created_at') ?? $closedAt);
 
             $closure = CashRegisterClosure::create([
                 'user_id'         => $user->id,
-                'opened_at'       => $openedAt,
+                'opened_at'       => $session->opened_at,
                 'closed_at'       => $closedAt,
                 'totals'          => [
                     'payments_count'   => $payments->count(),
+                    'opening_amount'   => $opening,
                     'by_method'        => $byMethod,
-                    'cash_expected'    => $cashExpected,
-                    'voucher_expected' => $voucherExpected,
-                    'other_expected'   => round($expected - $cashExpected - $voucherExpected, 2),
+                    'cash_expected'    => round($opening + $classified['cash'], 2),
+                    'voucher_expected' => $classified['card'],
+                    'other_expected'   => $classified['other'],
                     'cash_counted'     => round((float) $validated['cash_amount'], 2),
                     'voucher_counted'  => round((float) $validated['voucher_amount'], 2),
                 ],
@@ -227,15 +238,28 @@ class ReportController extends Controller
                     ->update(['is_reconciled' => true, 'cash_register_closure_id' => $closure->id]);
             }
 
-            return $closure;
+            $session->update([
+                'status'                   => CashRegisterSession::STATUS_CLOSED,
+                'closed_at'                => $closedAt,
+                'cash_register_closure_id' => $closure->id,
+            ]);
+
+            return [$closure, $session];
         });
 
         Log::info('Cierre de caja realizado', ['user_id' => $user->id, 'closure_id' => $closure->id]);
+        ActivityLogger::log('cash_close', "Cierre de caja #{$closure->id} (diferencia {$closure->difference})", $session, [
+            'closure_id'      => $closure->id,
+            'expected_amount' => (float) $closure->expected_amount,
+            'counted_amount'  => (float) $closure->counted_amount,
+            'difference'      => (float) $closure->difference,
+        ]);
 
         return response()->json([
             'success'  => true,
             'message'  => 'Cierre de caja registrado exitosamente.',
             'closure'  => $closure,
+            'session'  => $session->fresh(),
             'receipt'  => [
                 'closure_id'      => $closure->id,
                 'date'            => $closedAt->format('Y-m-d H:i:s'),
