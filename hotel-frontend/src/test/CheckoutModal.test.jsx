@@ -1,12 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CheckoutModal from '../components/CheckoutModal';
+import { AuthContext } from '../context/AuthContext';
 import { createCheckoutIntent, processMockPayment } from '../services/paymentService';
+import { sendBookingVerificationCode, verifyBookingCode } from '../services/bookingVerificationService';
 
 vi.mock('../services/paymentService', () => ({
   createCheckoutIntent: vi.fn(),
   processMockPayment: vi.fn(),
+}));
+vi.mock('../services/bookingVerificationService', () => ({
+  sendBookingVerificationCode: vi.fn(),
+  verifyBookingCode: vi.fn(),
 }));
 vi.mock('../services/rooms', () => ({
   getRoomBookedDates: vi.fn().mockResolvedValue([]),
@@ -30,20 +36,34 @@ function futureYm() {
   return `12/${String((d.getFullYear() + 3) % 100).padStart(2, '0')}`;
 }
 
-function renderModal(props = {}) {
+const LOGGED_IN = { user: { id: 30, name: 'Lucía', roles: ['cliente'] }, loading: false };
+const ANONYMOUS = { user: null, loading: false };
+const TOKEN = 't'.repeat(64);
+
+/** auth: valor del AuthContext (por defecto, cliente con sesión iniciada). */
+function renderModal(props = {}, { auth = LOGGED_IN, userOptions } = {}) {
   const onClose = vi.fn();
   const onPaymentSuccess = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup(userOptions);
   render(
-    <CheckoutModal
-      room={room}
-      initialDates={{ check_in: '2030-05-10', check_out: '2030-05-12' }}
-      onClose={onClose}
-      onPaymentSuccess={onPaymentSuccess}
-      {...props}
-    />,
+    <AuthContext.Provider value={auth}>
+      <CheckoutModal
+        room={room}
+        initialDates={{ check_in: '2030-05-10', check_out: '2030-05-12' }}
+        onClose={onClose}
+        onPaymentSuccess={onPaymentSuccess}
+        {...props}
+      />
+    </AuthContext.Provider>,
   );
   return { user, onClose, onPaymentSuccess };
+}
+
+async function verifyEmail(user) {
+  await user.click(screen.getByRole('button', { name: 'Enviar código' }));
+  await user.type(await screen.findByLabelText('Código de verificación'), '123456');
+  await user.click(screen.getByRole('button', { name: 'Verificar' }));
+  await screen.findByText('Correo verificado');
 }
 
 async function fillGuest(user) {
@@ -138,5 +158,121 @@ describe('CheckoutModal', () => {
     const { user, onClose } = renderModal();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('con sesión iniciada no pide verificar el correo ni envía token', async () => {
+    const { user } = renderModal();
+    expect(screen.queryByRole('button', { name: /Enviar código/ })).not.toBeInTheDocument();
+    await fillGuest(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+    expect(createCheckoutIntent).toHaveBeenCalledTimes(1);
+    expect(createCheckoutIntent.mock.calls[0][0]).not.toHaveProperty('verification_token');
+  });
+});
+
+describe('CheckoutModal: verificación de correo sin sesión (SHE-026)', () => {
+  beforeEach(() => {
+    createCheckoutIntent.mockResolvedValue({ booking_code: 'RES-ANON0001', expires_at: null });
+    sendBookingVerificationCode.mockResolvedValue({ message: 'Si el correo es válido, enviamos un código' });
+    verifyBookingCode.mockResolvedValue({ verification_token: TOKEN, expires_at: '2030-01-01T00:30:00Z' });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('bloquea el paso siguiente hasta verificar el correo', async () => {
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    const continueBtn = screen.getByRole('button', { name: /Continuar al Pago Seguro/ });
+    expect(continueBtn).toBeDisabled();
+    expect(screen.getByText('Verifica tu correo para continuar.')).toBeInTheDocument();
+
+    // Sin un correo válido no se puede pedir el código
+    expect(screen.getByRole('button', { name: 'Enviar código' })).toBeDisabled();
+    await fillGuest(user);
+    expect(screen.getByRole('button', { name: 'Enviar código' })).toBeEnabled();
+    expect(continueBtn).toBeDisabled();
+    expect(createCheckoutIntent).not.toHaveBeenCalled();
+  });
+
+  it('envía el código, lo verifica y manda el token en el checkout-intent', async () => {
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await user.click(screen.getByRole('button', { name: 'Enviar código' }));
+    expect(sendBookingVerificationCode).toHaveBeenCalledWith('lucia@example.com');
+
+    const codeInput = await screen.findByLabelText('Código de verificación');
+    expect(codeInput).toHaveAttribute('inputmode', 'numeric');
+    expect(codeInput).toHaveAttribute('autocomplete', 'one-time-code');
+    await user.type(codeInput, '12a34567');
+    expect(codeInput).toHaveValue('123456');
+
+    await user.click(screen.getByRole('button', { name: 'Verificar' }));
+    expect(verifyBookingCode).toHaveBeenCalledWith('lucia@example.com', '123456');
+    expect(await screen.findByText('Correo verificado')).toBeInTheDocument();
+
+    const continueBtn = screen.getByRole('button', { name: /Continuar al Pago Seguro/ });
+    expect(continueBtn).toBeEnabled();
+    await user.click(continueBtn);
+    expect(createCheckoutIntent).toHaveBeenCalledWith(expect.objectContaining({
+      guest_email: 'lucia@example.com',
+      verification_token: TOKEN,
+    }));
+    expect(await screen.findByLabelText(/Número de Tarjeta/)).toBeInTheDocument();
+  });
+
+  it('muestra un mensaje genérico si el código es inválido y no avanza', async () => {
+    verifyBookingCode.mockRejectedValueOnce({ response: { status: 422, data: { message: 'SQLSTATE detalle interno' } } });
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await user.click(screen.getByRole('button', { name: 'Enviar código' }));
+    await user.type(await screen.findByLabelText('Código de verificación'), '000000');
+    await user.click(screen.getByRole('button', { name: 'Verificar' }));
+
+    expect(await screen.findByText(/Código inválido o vencido/)).toBeInTheDocument();
+    expect(screen.queryByText(/SQLSTATE/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Correo verificado')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
+  });
+
+  it('cambiar el correo invalida la verificación', async () => {
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await verifyEmail(user);
+
+    await user.type(screen.getByLabelText('Correo Electrónico *'), 'x');
+    expect(screen.queryByText('Correo verificado')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
+  });
+
+  it('permite reenviar el código solo tras la cuenta regresiva de 60 s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = renderModal({}, { auth: ANONYMOUS, userOptions: { advanceTimers: vi.advanceTimersByTime } });
+    await fillGuest(user);
+    await user.click(screen.getByRole('button', { name: 'Enviar código' }));
+
+    const resend = await screen.findByRole('button', { name: /Reenviar código \(\d+ s\)/ });
+    expect(resend).toBeDisabled();
+
+    for (let i = 0; i < 61; i += 1) {
+      // Cada segundo programa el siguiente tick de la cuenta regresiva
+      await act(async () => { vi.advanceTimersByTime(1000); });
+    }
+    const ready = screen.getByRole('button', { name: 'Reenviar código' });
+    expect(ready).toBeEnabled();
+    await user.click(ready);
+    expect(sendBookingVerificationCode).toHaveBeenCalledTimes(2);
+  });
+
+  it('si la API exige verificación (422) vuelve a pedir el código', async () => {
+    createCheckoutIntent.mockRejectedValueOnce({ response: { status: 422, data: { message: 'Verifica tu correo para continuar', requires_verification: true } } });
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await verifyEmail(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+
+    expect(await screen.findByRole('button', { name: 'Enviar código' })).toBeEnabled();
+    expect(screen.queryByText('Correo verificado')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
   });
 });
