@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
-import CloseRegisterModal from '../../components/reports/CloseRegisterModal';
 import CashRegisterClosureHistory from '../../components/reports/CashRegisterClosureHistory';
+import CashSessionWidget from '../../components/staff/CashSessionWidget';
 import { ROOM_TYPE_LABELS } from '../../constants/rooms';
 import { getDashboardReports, getReportStats } from '../../services/reportService';
 import { HOTEL_NAME } from '../../constants/hotel';
@@ -71,7 +71,6 @@ export default function ReportsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [isCloseRegisterModalOpen, setCloseRegisterModalOpen] = useState(false);
   const [historyVersion, setHistoryVersion] = useState(0);
 
   const fetchReports = useCallback(async () => {
@@ -277,6 +276,14 @@ export default function ReportsDashboard() {
             </div>
           </div>
 
+          {/* Caja del turno (SHE-014): apertura y cierre */}
+          <CashSessionWidget
+            onClosed={() => {
+              fetchReports();
+              setHistoryVersion((v) => v + 1);
+            }}
+          />
+
           {error && (
             <div className="bg-[#ffdad6] text-[#93000a] p-4 text-sm font-mono border border-[#ba1a1a]/30">
               {error}
@@ -384,17 +391,6 @@ export default function ReportsDashboard() {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <div className="flex justify-end pt-8 pb-4">
-                <button
-                  onClick={() => setCloseRegisterModalOpen(true)}
-                  className="bg-[#c9a227] text-[#14213d] font-serif font-bold text-lg px-8 py-4 shadow-md hover:shadow-xl hover:brightness-105 transition-all flex items-center gap-3 border border-[#a68a4d] cursor-pointer"
-                >
-                  <span className="material-symbols-outlined">account_balance_wallet</span>
-                  Realizar Cierre de Caja
-                </button>
-              </div>
-
               {/* Historial de Cierres de Caja para Auditoría (SHE-015) */}
               <CashRegisterClosureHistory key={historyVersion} />
             </>
@@ -403,18 +399,6 @@ export default function ReportsDashboard() {
         </div>
       </main>
 
-      {/* Modal Cierre de Caja */}
-      {isCloseRegisterModalOpen && (
-        <CloseRegisterModal
-          onClose={() => setCloseRegisterModalOpen(false)}
-          onSuccess={() => {
-            setCloseRegisterModalOpen(false);
-            fetchReports();
-            setHistoryVersion((v) => v + 1);
-          }}
-          expectedAmount={Number(data?.unreconciled_revenue || 0)}
-        />
-      )}
     </div>
   );
 }

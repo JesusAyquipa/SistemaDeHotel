@@ -4,6 +4,7 @@ import StaffLayout from '../../components/StaffLayout';
 import Toast from '../../components/Toast';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import GuestFlags from '../../components/staff/GuestFlags';
+import CashSessionWidget from '../../components/staff/CashSessionWidget';
 import { useAuth } from '../../context/AuthContext';
 import useFrontDeskActions from '../../hooks/useFrontDeskActions';
 import { getToday, markNoShow } from '../../services/frontDeskService';
@@ -224,6 +225,9 @@ export default function FrontDeskToday() {
               Actualizar
             </button>
           </div>
+
+          {/* Caja del turno (SHE-014) */}
+          <CashSessionWidget onNotify={notify} />
 
           {/* Contadores (también funcionan como pestañas en pantallas pequeñas) */}
           <div role="tablist" aria-label="Secciones del día" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
