@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiErrorMessage } from '../../utils/apiError';
 import logError from '../../utils/logError';
 import formatCurrency from '../../utils/formatCurrency';
+import { WEEKDAYS, describeWeekdays, normalizeWeekdays } from '../../utils/weekdays';
 
 export default function SettingsDashboard() {
   const [seasons, setSeasons] = useState([]);
@@ -153,7 +154,13 @@ export default function SettingsDashboard() {
                        {s.room_type?.name ? `Solo: ${s.room_type.name}` : 'Todos los tipos'}
                      </span>
                    </div>
-                   <div className="col-span-1">{formatDate(s.start_date)} - {formatDate(s.end_date)}</div>
+                   <div className="col-span-1">
+                     {formatDate(s.start_date)} - {formatDate(s.end_date)}
+                     {/* SHE-018: días de la semana en que aplica */}
+                     <span className="block font-mono text-[10px] text-[#78716c]" title={normalizeWeekdays(s.days_of_week).map((d) => WEEKDAYS.find((w) => w.value === d)?.long).join(', ') || 'Todos los días'}>
+                       {describeWeekdays(s.days_of_week)}
+                     </span>
+                   </div>
                    <div className="col-span-1 text-center font-mono text-[#ba1a1a] font-bold">
                      {s.rate_adjustment > 0 ? `+${s.rate_adjustment}%` : `${s.rate_adjustment}%`}
                    </div>
