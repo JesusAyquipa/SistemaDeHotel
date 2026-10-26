@@ -123,7 +123,7 @@ class CashSessionTest extends TestCase
         $this->getJson('/api/staff/cash-sessions/current')
             ->assertOk()
             ->assertJsonPath('session', null)
-            ->assertJsonPath('summary.expected_cash', 0.0);
+            ->assertJsonPath('summary.expected_cash', fn ($v) => (float) $v === 0.0);
     }
 
     public function test_current_summary_splits_payments_by_method_since_opening(): void
@@ -149,11 +149,11 @@ class CashSessionTest extends TestCase
         $this->getJson('/api/staff/cash-sessions/current')
             ->assertOk()
             ->assertJsonPath('session.status', 'open')
-            ->assertJsonPath('summary.opening_amount', 100.0)
-            ->assertJsonPath('summary.cash_payments', 80.5)
-            ->assertJsonPath('summary.card_payments', 270.0)
-            ->assertJsonPath('summary.other_payments', 25.0)
-            ->assertJsonPath('summary.expected_cash', 180.5);
+            ->assertJsonPath('summary.opening_amount', fn ($v) => (float) $v === 100.0)
+            ->assertJsonPath('summary.cash_payments', fn ($v) => (float) $v === 80.5)
+            ->assertJsonPath('summary.card_payments', fn ($v) => (float) $v === 270.0)
+            ->assertJsonPath('summary.other_payments', fn ($v) => (float) $v === 25.0)
+            ->assertJsonPath('summary.expected_cash', fn ($v) => (float) $v === 180.5);
     }
 
     public function test_current_only_shows_own_session(): void
@@ -192,9 +192,9 @@ class CashSessionTest extends TestCase
             'difference'      => 0,
         ])->assertOk()
             ->assertJsonPath('success', true)
-            ->assertJsonPath('receipt.expected_amount', 350.0)
-            ->assertJsonPath('receipt.counted_amount', 340.0)
-            ->assertJsonPath('receipt.difference', -10.0)
+            ->assertJsonPath('receipt.expected_amount', fn ($v) => (float) $v === 350.0)
+            ->assertJsonPath('receipt.counted_amount', fn ($v) => (float) $v === 340.0)
+            ->assertJsonPath('receipt.difference', fn ($v) => (float) $v === -10.0)
             ->assertJsonPath('session.status', 'closed');
 
         $closure = $session->fresh()->closure;
@@ -262,9 +262,9 @@ class CashSessionTest extends TestCase
         $all = $this->getJson('/api/staff/cash-sessions')->assertOk();
         $all->assertJsonPath('meta.total', 3)
             ->assertJsonPath('meta.per_page', 20)
-            ->assertJsonPath('meta.totals.expected_amount', 150.0)
-            ->assertJsonPath('meta.totals.counted_amount', 150.0)
-            ->assertJsonPath('meta.totals.difference', 0.0);
+            ->assertJsonPath('meta.totals.expected_amount', fn ($v) => (float) $v === 150.0)
+            ->assertJsonPath('meta.totals.counted_amount', fn ($v) => (float) $v === 150.0)
+            ->assertJsonPath('meta.totals.difference', fn ($v) => (float) $v === 0.0);
         $this->assertCount(3, $all->json('data'));
         $first = collect($all->json('data'))->firstWhere('id', $a->id);
         $this->assertSame(['id' => $this->receptionist->id, 'name' => $this->receptionist->name], $first['user']);
@@ -279,7 +279,7 @@ class CashSessionTest extends TestCase
 
         // Filtros
         $this->getJson('/api/staff/cash-sessions?user_id=' . $this->admin->id)
-            ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('meta.totals.difference', 10.0);
+            ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('meta.totals.difference', fn ($v) => (float) $v === 10.0);
         $this->getJson('/api/staff/cash-sessions?status=open')->assertOk()->assertJsonPath('meta.total', 1);
         $this->getJson('/api/staff/cash-sessions?status=closed')->assertOk()->assertJsonPath('meta.total', 2);
         $this->getJson('/api/staff/cash-sessions?date_from=' . now()->addDay()->toDateString())
@@ -319,7 +319,7 @@ class CashSessionTest extends TestCase
         $detail = $this->getJson("/api/staff/cash-sessions/{$session->id}")->assertOk()
             ->assertJsonPath('session.id', $session->id)
             ->assertJsonPath('session.status', 'closed')
-            ->assertJsonPath('session.expected_amount', 300.0);
+            ->assertJsonPath('session.expected_amount', fn ($v) => (float) $v === 300.0);
 
         $this->assertCount(2, $detail->json('payments'));
         $this->assertEqualsCanonicalizing([75.0, 125.0], array_map('floatval', array_column($detail->json('payments'), 'amount')));
