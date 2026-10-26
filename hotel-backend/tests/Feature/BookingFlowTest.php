@@ -364,6 +364,7 @@ class BookingFlowTest extends TestCase
     {
         $booking = $this->confirmedOwnerBooking([], 500.00); // saldo 100
         Sanctum::actingAs($this->receptionist);
+        $this->postJson('/api/staff/cash-sessions/open', ['opening_amount' => 0])->assertStatus(201);
 
         $this->postJson("/api/staff/bookings/{$booking->id}/pay", ['amount' => 150, 'method' => 'Efectivo'])
             ->assertStatus(422);
@@ -371,6 +372,44 @@ class BookingFlowTest extends TestCase
             ->assertStatus(422);
         $this->postJson("/api/staff/bookings/{$booking->id}/pay", ['amount' => 100, 'method' => 'Efectivo'])
             ->assertStatus(200)->assertJson(['balance' => 0]);
+    }
+
+    public function test_staff_payment_without_open_session_is_rejected_and_with_session_is_attributed(): void
+    {
+        $booking = $this->confirmedOwnerBooking([], 500.00); // saldo 100
+        Sanctum::actingAs($this->receptionist);
+
+        $this->postJson("/api/staff/bookings/{$booking->id}/pay", ['amount' => 40, 'method' => 'Efectivo'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Debes abrir caja antes de registrar cobros');
+        $this->assertSame(0, Payment::where('transaction_id', 'like', 'MANUAL-%')->count());
+
+        $this->postJson('/api/staff/cash-sessions/open', ['opening_amount' => 10])->assertStatus(201);
+        $sessionId = \App\Models\CashRegisterSession::where('user_id', $this->receptionist->id)->value('id');
+
+        $this->postJson("/api/staff/bookings/{$booking->id}/pay", ['amount' => 40, 'method' => 'Efectivo'])->assertOk();
+        $this->assertSame($sessionId, Payment::where('transaction_id', 'like', 'MANUAL-%')->value('cash_register_session_id'));
+    }
+
+    public function test_walk_in_cash_payment_requires_open_session_and_is_attributed(): void
+    {
+        Sanctum::actingAs($this->receptionist);
+
+        $this->postJson('/api/bookings', $this->walkInPayload(['payment_method' => 'cash']))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Debes abrir caja antes de registrar cobros');
+        $this->assertSame(0, Booking::count());
+        $this->assertSame(0, Payment::where('gateway_provider', 'manual')->count());
+
+        // cash_later no mueve dinero: no exige caja
+        $this->postJson('/api/bookings', $this->walkInPayload(['payment_method' => 'cash_later']))->assertStatus(201);
+
+        $this->postJson('/api/staff/cash-sessions/open', ['opening_amount' => 0])->assertStatus(201);
+        $sessionId = \App\Models\CashRegisterSession::where('user_id', $this->receptionist->id)->value('id');
+        $this->postJson('/api/bookings', $this->walkInPayload([
+            'payment_method' => 'cash', 'check_in' => now()->addDays(10)->toDateString(), 'check_out' => now()->addDays(12)->toDateString(),
+        ]))->assertStatus(201);
+        $this->assertSame($sessionId, Payment::where('gateway_provider', 'manual')->value('cash_register_session_id'));
     }
 
     public function test_add_charge_decrements_stock_atomically_and_services_have_no_stock(): void

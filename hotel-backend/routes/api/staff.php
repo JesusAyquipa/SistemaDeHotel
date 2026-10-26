@@ -49,7 +49,6 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
         // Reportes y caja (SHE-014 / SHE-015)
         Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
         Route::get('/reports/stats', [ReportStatsController::class, 'stats']);
-        Route::get('/reports/closures', [ReportController::class, 'closures']);
         Route::post('/reports/close-register', [ReportController::class, 'closeRegister']);
 
         // Catálogo de productos (lectura)
@@ -79,6 +78,9 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
         Route::post('/products', [ProductController::class, 'store']);
         Route::put('/products/{id}', [ProductController::class, 'update'])->whereNumber('id');
         Route::delete('/products/{id}', [ProductController::class, 'destroy'])->whereNumber('id');
+
+        // Historial de cierres de caja (solo admin)
+        Route::get('/reports/closures', [ReportController::class, 'closures']);
 
         // Bitácora de auditoría (SHE-021)
         Route::get('/activity-logs', [ActivityLogController::class, 'index']);

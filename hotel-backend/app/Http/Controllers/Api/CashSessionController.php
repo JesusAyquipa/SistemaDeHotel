@@ -81,6 +81,7 @@ class CashSessionController extends Controller
                 'card_payments'  => 0.0,
                 'other_payments' => 0.0,
                 'expected_cash'  => 0.0,
+                'online_payments' => 0.0,
             ],
         ]);
     }
@@ -121,6 +122,8 @@ class CashSessionController extends Controller
                 'last_page'    => $page->lastPage(),
                 'per_page'     => $page->perPage(),
                 'total'        => $page->total(),
+                'from'         => $page->firstItem(),
+                'to'           => $page->lastItem(),
                 'totals'       => [
                     'expected_amount' => round((float) $sums->expected, 2),
                     'counted_amount'  => round((float) $sums->counted, 2),

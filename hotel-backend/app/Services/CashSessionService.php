@@ -4,14 +4,15 @@ namespace App\Services;
 
 use App\Models\CashRegisterSession;
 use App\Models\Payment;
-use Carbon\CarbonInterface;
+use App\Services\Booking\BookingException;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Cálculos de las sesiones de caja (SHE-014).
  *
- * Pagos de una sesión: completados, de importe positivo, aún no conciliados y creados
- * desde la apertura (opened_at) hasta el momento indicado.
+ * Pagos de una sesión: completados, de importe positivo, aún no conciliados y atribuidos
+ * explícitamente a la sesión (payments.cash_register_session_id). Los pagos en línea
+ * (sin sesión) no son dinero de caja y se informan aparte.
  * Clasificación por método: efectivo => cash; tarjeta / voucher / mock => card; resto => other.
  */
 class CashSessionService
@@ -19,19 +20,38 @@ class CashSessionService
     /** Métodos que se agrupan como "tarjeta" en el resumen de caja. */
     public const CARD_METHODS = ['Tarjeta', 'card', 'voucher', 'Voucher', 'mock'];
 
-    public static function sessionPaymentsQuery(CashRegisterSession $session, ?CarbonInterface $until = null): Builder
+    public static function sessionPaymentsQuery(CashRegisterSession $session): Builder
     {
-        $query = Payment::query()
+        return Payment::query()
+            ->where('cash_register_session_id', $session->id)
             ->where('status', Payment::STATUS_COMPLETED)
             ->where('amount', '>', 0)
-            ->where('is_reconciled', false)
-            ->where('created_at', '>=', $session->opened_at);
+            ->where('is_reconciled', false);
+    }
 
-        if ($until) {
-            $query->where('created_at', '<=', $until);
+    /**
+     * Sesión abierta del usuario, bloqueada (lockForUpdate) para serializar con el cierre.
+     * Debe llamarse dentro de una transacción. Lanza 422 si no hay caja abierta.
+     */
+    public static function requireOpenSessionLocked(int $userId): CashRegisterSession
+    {
+        $session = CashRegisterSession::where('user_id', $userId)->open()->latest('id')->lockForUpdate()->first();
+        if (!$session) {
+            throw new BookingException('Debes abrir caja antes de registrar cobros', 422);
         }
 
-        return $query;
+        return $session;
+    }
+
+    /** Suma informativa de pagos en línea (sin sesión) completados desde la apertura. */
+    public static function onlinePaymentsTotal(CashRegisterSession $session): float
+    {
+        return round((float) Payment::query()
+            ->whereNull('cash_register_session_id')
+            ->where('status', Payment::STATUS_COMPLETED)
+            ->where('amount', '>', 0)
+            ->where('created_at', '>=', $session->opened_at)
+            ->sum('amount'), 2);
     }
 
     /**
@@ -73,6 +93,7 @@ class CashSessionService
             'card_payments'  => $totals['card'],
             'other_payments' => $totals['other'],
             'expected_cash'  => round($opening + $totals['cash'], 2),
+            'online_payments' => self::onlinePaymentsTotal($session),
         ];
     }
 }

@@ -31,7 +31,30 @@ class CashSessionTest extends TestCase
         return CashRegisterSession::where('user_id', $user->id)->latest('id')->firstOrFail();
     }
 
-    private function payment(float $amount, string $method): Payment
+    /**
+     * Pago de personal: se atribuye a la sesión indicada o, por defecto, a la última sesión abierta
+     * (null si no hay ninguna: equivale a un pago sin caja).
+     */
+    private function payment(float $amount, string $method, ?CashRegisterSession $session = null): Payment
+    {
+        $booking = $this->makeBooking(['guest_id' => $this->guest->id], 0);
+        $session ??= CashRegisterSession::open()->latest('id')->first();
+
+        return Payment::create([
+            'booking_id'       => $booking->id,
+            'cash_register_session_id' => $session?->id,
+            'amount'           => $amount,
+            'payment_method'   => $method,
+            'status'           => Payment::STATUS_COMPLETED,
+            'transaction_id'   => 'TX-CS-' . uniqid(),
+            'gateway_provider' => 'simulation',
+            'currency'         => 'PEN',
+            'paid_at'          => now(),
+        ]);
+    }
+
+    /** Pago en línea / de huésped: sin sesión de caja. */
+    private function onlinePayment(float $amount, string $method = 'card'): Payment
     {
         $booking = $this->makeBooking(['guest_id' => $this->guest->id], 0);
 
@@ -40,7 +63,7 @@ class CashSessionTest extends TestCase
             'amount'           => $amount,
             'payment_method'   => $method,
             'status'           => Payment::STATUS_COMPLETED,
-            'transaction_id'   => 'TX-CS-' . uniqid(),
+            'transaction_id'   => 'TX-ON-' . uniqid(),
             'gateway_provider' => 'simulation',
             'currency'         => 'PEN',
             'paid_at'          => now(),
@@ -229,6 +252,90 @@ class CashSessionTest extends TestCase
         $this->postJson('/api/staff/reports/close-register', ['cash_amount' => -1, 'voucher_amount' => 0])->assertStatus(422);
         $this->postJson('/api/staff/reports/close-register', ['voucher_amount' => 0])->assertStatus(422);
         $this->assertSame('open', CashRegisterSession::first()->status);
+    }
+
+    // ------------------------------------------------------------ atribución de pagos a sesión
+
+    public function test_two_concurrent_sessions_do_not_share_payments(): void
+    {
+        $recep = $this->openAs($this->receptionist, 100);
+        $admin = $this->openAs($this->admin, 50);
+
+        $this->payment(40, 'Efectivo', $recep);
+        $this->payment(60, 'card', $admin);
+        $this->payment(10, 'Efectivo', $admin);
+
+        Sanctum::actingAs($this->receptionist);
+        $this->getJson('/api/staff/cash-sessions/current')->assertOk()
+            ->assertJsonPath('summary.cash_payments', fn ($v) => (float) $v === 40.0)
+            ->assertJsonPath('summary.card_payments', fn ($v) => (float) $v === 0.0)
+            ->assertJsonPath('summary.expected_cash', fn ($v) => (float) $v === 140.0);
+
+        Sanctum::actingAs($this->admin);
+        $this->getJson('/api/staff/cash-sessions/current')->assertOk()
+            ->assertJsonPath('summary.cash_payments', fn ($v) => (float) $v === 10.0)
+            ->assertJsonPath('summary.card_payments', fn ($v) => (float) $v === 60.0);
+
+        // Cierra la de recepción: solo concilia sus pagos
+        Sanctum::actingAs($this->receptionist);
+        $this->postJson('/api/staff/reports/close-register', ['cash_amount' => 140, 'voucher_amount' => 0])
+            ->assertOk()
+            ->assertJsonPath('receipt.expected_amount', fn ($v) => (float) $v === 140.0)
+            ->assertJsonPath('receipt.difference', fn ($v) => (float) $v === 0.0);
+
+        $this->assertSame(1, Payment::where('is_reconciled', true)->count());
+        $this->assertSame(2, Payment::where('cash_register_session_id', $admin->id)->where('is_reconciled', false)->count());
+
+        Sanctum::actingAs($this->admin);
+        $this->postJson('/api/staff/reports/close-register', ['cash_amount' => 60, 'voucher_amount' => 60])
+            ->assertOk()
+            ->assertJsonPath('receipt.expected_amount', fn ($v) => (float) $v === 120.0);
+    }
+
+    public function test_online_payments_are_not_counted_in_expected_but_reported_separately(): void
+    {
+        $session = $this->openAs($this->receptionist, 100);
+        $this->payment(50, 'Efectivo', $session);
+        $this->onlinePayment(300, 'card');
+
+        Sanctum::actingAs($this->receptionist);
+        $this->getJson('/api/staff/cash-sessions/current')->assertOk()
+            ->assertJsonPath('summary.card_payments', fn ($v) => (float) $v === 0.0)
+            ->assertJsonPath('summary.expected_cash', fn ($v) => (float) $v === 150.0)
+            ->assertJsonPath('summary.online_payments', fn ($v) => (float) $v === 300.0);
+
+        $response = $this->postJson('/api/staff/reports/close-register', ['cash_amount' => 150, 'voucher_amount' => 0])
+            ->assertOk()
+            ->assertJsonPath('receipt.expected_amount', fn ($v) => (float) $v === 150.0);
+
+        $this->assertSame(1, Payment::where('is_reconciled', true)->count());
+        $this->assertFalse((bool) Payment::whereNull('cash_register_session_id')->firstOrFail()->is_reconciled);
+        unset($response);
+    }
+
+    public function test_history_meta_has_from_and_to(): void
+    {
+        for ($i = 0; $i < 21; $i++) {
+            CashRegisterSession::create([
+                'user_id' => $this->receptionist->id, 'opened_at' => now()->subMinutes($i + 1),
+                'opening_amount' => 1, 'status' => 'closed', 'closed_at' => now(),
+            ]);
+        }
+
+        Sanctum::actingAs($this->admin);
+        $this->getJson('/api/staff/cash-sessions')->assertOk()
+            ->assertJsonPath('meta.from', 1)->assertJsonPath('meta.to', 20);
+        $this->getJson('/api/staff/cash-sessions?page=2')->assertOk()
+            ->assertJsonPath('meta.from', 21)->assertJsonPath('meta.to', 21);
+    }
+
+    public function test_closures_history_is_admin_only(): void
+    {
+        Sanctum::actingAs($this->receptionist);
+        $this->getJson('/api/staff/reports/closures')->assertStatus(403);
+
+        Sanctum::actingAs($this->admin);
+        $this->getJson('/api/staff/reports/closures')->assertOk();
     }
 
     // ------------------------------------------------------------ SHE-015 historial

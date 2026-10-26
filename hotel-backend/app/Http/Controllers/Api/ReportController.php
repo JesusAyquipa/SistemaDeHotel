@@ -200,7 +200,7 @@ class ReportController extends Controller
                 throw new BookingException('Debes abrir caja antes de cerrarla', 422);
             }
 
-            $payments = CashSessionService::sessionPaymentsQuery($session, $closedAt)
+            $payments = CashSessionService::sessionPaymentsQuery($session)
                 ->lockForUpdate()
                 ->get(['id', 'amount', 'payment_method', 'created_at']);
 
