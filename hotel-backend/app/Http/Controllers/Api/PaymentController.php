@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Services\Booking\BookingException;
 use App\Services\BookingPricingService;
 use App\Services\BookingService;
+use App\Services\BookingVerificationService;
 use App\Services\CouponService;
 use App\Services\Payment\CardValidator;
 use App\Services\Payment\MockPaymentService;
@@ -27,6 +28,7 @@ class PaymentController extends Controller
         private PaymentGatewayInterface $paymentGateway,
         private BookingService $bookings,
         private CouponService $coupons,
+        private BookingVerificationService $verifications,
     ) {
     }
 
@@ -59,6 +61,7 @@ class PaymentController extends Controller
             'companions.*.phone' => ['nullable', 'string', 'max:20', 'regex:/^\+?[0-9\s\-]+$/'],
             'coupon_code'     => 'nullable|string|max:50',
             'payment_method'  => 'nullable|string|in:card,cash,cash_later',
+            'verification_token' => 'nullable|string|max:128',
         ]);
 
         $paymentMethod = $validated['payment_method'] ?? 'card';
@@ -68,9 +71,21 @@ class PaymentController extends Controller
             ], 422);
         }
 
+        // SHE-026: sin sesión (Sanctum) se exige un correo verificado por OTP.
+        $verification = null;
+        if (!auth('sanctum')->user()) {
+            $verification = $this->verifications->assertValid($validated['verification_token'] ?? null, $validated['guest_email']);
+        }
+        unset($validated['verification_token']);
+
         $paymentIntent = null;
 
-        $result = $this->bookings->create($validated, false, function (Booking $booking, array $quote) use (&$paymentIntent) {
+        $result = $this->bookings->create($validated, false, function (Booking $booking, array $quote) use (&$paymentIntent, $verification) {
+            // El token se consume al crear la reserva (misma transacción: si algo falla, no se pierde).
+            if ($verification) {
+                $this->verifications->consume($verification);
+            }
+
             $paymentIntent = $this->paymentGateway->createPaymentIntent($quote['total'], 'PEN', [
                 'booking_code' => $booking->booking_code,
                 'room_id'      => $booking->room_id,

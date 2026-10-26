@@ -16,7 +16,7 @@ use Tests\TestCase;
 
 class BookingFlowTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, IssuesVerificationTokens;
 
     private Room $room;
     private User $owner;
@@ -316,6 +316,7 @@ class BookingFlowTest extends TestCase
             'document_type'   => 'DNI',
             'document_number' => $doc,
             'coupon_code'     => 'DESC10',
+            'verification_token' => $this->verificationTokenFor($email),
         ]);
 
         // Intent: descuento aplicado pero uso NO contabilizado

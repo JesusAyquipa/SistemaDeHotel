@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 class PaymentCheckoutTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, IssuesVerificationTokens;
 
     private const WEBHOOK_SECRET = 'test-webhook-secret';
 
@@ -37,7 +37,7 @@ class PaymentCheckoutTest extends TestCase
 
     private function intentPayload(array $overrides = []): array
     {
-        return array_merge([
+        $payload = array_merge([
             'room_id'         => $this->room->id,
             'check_in'        => now()->addDays(1)->toDateString(),
             'check_out'       => now()->addDays(3)->toDateString(),
@@ -48,6 +48,11 @@ class PaymentCheckoutTest extends TestCase
             'document_number' => '87654321',
             'guest_phone'     => '+51987654321',
         ], $overrides);
+
+        // SHE-026: sin sesión, el checkout exige el correo verificado (token de un solo uso)
+        $payload['verification_token'] ??= $this->verificationTokenFor($payload['guest_email']);
+
+        return $payload;
     }
 
     private function cardPayload(string $bookingCode, string $card = '4242 4242 4242 4242'): array

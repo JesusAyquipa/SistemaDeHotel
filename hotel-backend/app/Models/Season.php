@@ -17,6 +17,7 @@ class Season extends Model
         'end_date',
         'rate_adjustment',
         'is_active',
+        'days_of_week', // null/vacío = todos los días; 0 = domingo .. 6 = sábado
         'room_type_id', // SHE-034: null = todos los tipos
     ];
 
@@ -25,6 +26,7 @@ class Season extends Model
         'end_date' => 'date',
         'rate_adjustment' => 'decimal:2',
         'is_active' => 'boolean',
+        'days_of_week' => 'array',
         'room_type_id' => 'integer',
     ];
 

@@ -138,3 +138,20 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
         Route::post('/refunds/{paymentId}/reject', [\App\Http\Controllers\Api\RefundController::class, 'reject'])->whereNumber('paymentId');
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Caja: sesiones de apertura/cierre (SHE-014) e historial (SHE-015)
+|--------------------------------------------------------------------------
+*/
+Route::prefix('staff/cash-sessions')->middleware('auth:sanctum')->controller(\App\Http\Controllers\Api\CashSessionController::class)->group(function () {
+    Route::middleware('role:admin|recepcionista')->group(function () {
+        Route::post('/open', 'open');
+        Route::get('/current', 'current');
+    });
+
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/', 'index');
+        Route::get('/{id}', 'show')->whereNumber('id');
+    });
+});

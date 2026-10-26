@@ -145,9 +145,19 @@ class SettingsController extends Controller
             'end_date'        => [$required, 'date'],
             'rate_adjustment' => [$required, 'numeric', 'min:-100', 'max:1000'],
             'is_active'       => ['sometimes', 'boolean'],
+            // SHE-018: días de la semana (0 = domingo .. 6 = sábado); null/vacío = todos
+            'days_of_week'    => ['sometimes', 'nullable', 'array', 'max:7'],
+            'days_of_week.*'  => ['integer', 'between:0,6', 'distinct'],
             // SHE-034: tipo de habitación al que aplica (null = todos)
             'room_type_id'    => ['sometimes', 'nullable', 'integer', 'exists:room_types,id'],
         ]);
+
+        // Normaliza: enteros ordenados; vacío => null (todos los días)
+        if (array_key_exists('days_of_week', $validated)) {
+            $days = array_values(array_unique(array_map('intval', $validated['days_of_week'] ?? [])));
+            sort($days);
+            $validated['days_of_week'] = $days === [] ? null : $days;
+        }
 
         $start = $validated['start_date'] ?? $season?->start_date;
         $end = $validated['end_date'] ?? $season?->end_date;

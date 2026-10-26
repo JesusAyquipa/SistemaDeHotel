@@ -673,6 +673,10 @@ class BookingController extends Controller
                 throw new BookingException('La habitación está fuera de servicio (mantenimiento). Reasigne la reserva antes del check-in.', 422);
             }
 
+            if ($room && $room->status === Room::STATUS_CLEANING) {
+                throw new BookingException('La habitación está en limpieza. Márquela como disponible antes del check-in.', 422);
+            }
+
             $booking->update(['status' => Booking::STATUS_CHECKED_IN]);
             $room?->update(['status' => Room::STATUS_OCCUPIED]);
 
