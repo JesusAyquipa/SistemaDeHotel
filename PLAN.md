@@ -20,10 +20,11 @@ cambio de servidor web en Render.
 | Prueba manual en navegador contra backend real | **Pendiente (usuario)** | — |
 | Migraciones en MySQL/TiDB | **Pendiente (usuario)** | Solo probadas en SQLite |
 
-Decisiones pendientes del equipo:
-- Hay dos historiales de cajas: el de Jesús en Reportes (`/staff/reports/closures`) y `/admin/cajas` (sesiones). Elegir uno.
-- La verificación OTP solo aplica a reservas sin sesión, pero el sitio hoy obliga a iniciar sesión para reservar.
-  Decidir si se permite reservar como invitado.
+Decisiones tomadas (2026-10-26):
+- Historial de cajas: se usa `/admin/cajas` (sesiones con apertura/cierre). Se quitó el historial duplicado de Reportes
+  (el endpoint `/staff/reports/closures` sigue disponible solo para admin, sin pantalla).
+- Se permite reservar como invitado: sin sesión, el checkout exige verificar el correo con un código de 6 dígitos (SHE-026).
+  Requiere configurar `MAIL_*` en producción para que los códigos lleguen por correo.
 
 ## Ramas
 - `fix/auditoria-seguridad`: rama de trabajo publicada (incluye todo lo anterior).

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Link } from 'react-router-dom';
 import StaffSidebar from '../../components/StaffSidebar';
-import CashRegisterClosureHistory from '../../components/reports/CashRegisterClosureHistory';
 import CashSessionWidget from '../../components/staff/CashSessionWidget';
 import { ROOM_TYPE_LABELS } from '../../constants/rooms';
 import { getDashboardReports, getReportStats } from '../../services/reportService';
@@ -71,7 +71,6 @@ export default function ReportsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [historyVersion, setHistoryVersion] = useState(0);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -278,10 +277,7 @@ export default function ReportsDashboard() {
 
           {/* Caja del turno (SHE-014): apertura y cierre */}
           <CashSessionWidget
-            onClosed={() => {
-              fetchReports();
-              setHistoryVersion((v) => v + 1);
-            }}
+            onClosed={() => fetchReports()}
           />
 
           {error && (
@@ -391,8 +387,14 @@ export default function ReportsDashboard() {
                 </div>
               </div>
 
-              {/* Historial de Cierres de Caja para Auditoría (SHE-015) */}
-              <CashRegisterClosureHistory key={historyVersion} />
+              {/* Historial de cajas (SHE-015): vive en /admin/cajas */}
+              <Link
+                to="/admin/cajas"
+                className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#755b00] underline"
+              >
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">point_of_sale</span>
+                Ver historial de cajas
+              </Link>
             </>
           )}
 

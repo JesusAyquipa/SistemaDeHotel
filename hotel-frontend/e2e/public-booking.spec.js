@@ -32,11 +32,27 @@ test.describe('Flujo público de reserva', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('sin sesión, "Reservar" en el detalle lleva al login', async ({ page }) => {
-    await mockApi(page);
+  test('sin sesión se reserva como invitado verificando el correo con un código (SHE-026)', async ({ page }) => {
+    const calls = await mockApi(page);
     await page.goto('/habitaciones/101');
+    await expect(page.getByText(/Puedes reservar como invitado/)).toBeVisible();
+
     await page.getByRole('button', { name: /Reservar ahora/i }).click();
-    await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole('button', { name: /Iniciar Sesión/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/habitaciones\/101$/);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByLabel('Correo Electrónico *').fill('invitado@example.com');
+    await dialog.getByRole('button', { name: 'Enviar código' }).click();
+    expect(calls.some((c) => c.key === 'POST /booking-verification/send')).toBe(true);
+
+    const code = dialog.getByLabel('Código de verificación');
+    await code.fill('000000');
+    await dialog.getByRole('button', { name: 'Verificar' }).click();
+    await expect(dialog.getByText('Correo verificado')).toBeHidden();
+
+    await code.fill('123456');
+    await dialog.getByRole('button', { name: 'Verificar' }).click();
+    await expect(dialog.getByText('Correo verificado')).toBeVisible();
   });
 });
