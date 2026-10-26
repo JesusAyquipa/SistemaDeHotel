@@ -44,7 +44,9 @@ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 // SHE-026: estado de la verificación del correo para reservas sin cuenta.
 // status: idle | sending | sent | verifying | verified
-const INITIAL_VERIFICATION = { status: 'idle', email: '', token: null, message: '', error: '', consumed: false };
+// consumed: el token ya se usó en un checkout-intent (es de un solo uso).
+// consumedFingerprint: huella de los datos con los que se usó; null = ya no reutilizable.
+const INITIAL_VERIFICATION = { status: 'idle', email: '', token: null, message: '', error: '', consumed: false, consumedFingerprint: null };
 const REPEATING_REGEX = /(.)\1{2,}/;
 
 function StepIndicator({ currentStep }) {
@@ -119,7 +121,10 @@ export default function CheckoutModal({
 
   // ===== Verificación del correo (SHE-026, solo sin sesión) =====
   const auth = useContext(AuthContext);
-  const needsVerification = !auth?.loading && !auth?.user;
+  // Si el servidor exige verificación (422 requires_verification), se pide el código
+  // aunque haya una sesión en el cliente (p. ej. sesión vencida en el servidor).
+  const [forceVerification, setForceVerification] = useState(false);
+  const needsVerification = forceVerification || (!auth?.loading && !auth?.user);
   const [verification, setVerification] = useState(INITIAL_VERIFICATION);
   const [verificationCode, setVerificationCode] = useState('');
   const [resendIn, setResendIn] = useState(0);
@@ -131,20 +136,43 @@ export default function CheckoutModal({
     return () => clearTimeout(t);
   }, [resendIn]);
 
+  // ===== Cupones =====
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+
+  // Datos que se envían al checkout-intent (sin el token de verificación).
+  function buildIntentPayload() {
+    return {
+      room_id: room.id,
+      check_in: dates.check_in,
+      check_out: dates.check_out,
+      guest_name: guestData.guest_name.trim(),
+      guest_surname: guestData.guest_surname.trim(),
+      guest_email: guestData.guest_email.trim(),
+      document_type: guestData.document_type,
+      document_number: guestData.document_number.trim(),
+      guest_phone: guestData.guest_phone.trim() || undefined,
+      notes: guestData.notes.trim() || undefined,
+      companions: companions,
+      coupon_code: appliedCoupon ? appliedCoupon.code : null,
+    };
+  }
+
   const currentEmail = normalizeEmail(guestData.guest_email);
   // Si el huésped cambia el correo, la verificación anterior deja de valer.
   const verificationMatchesEmail = verification.email !== '' && verification.email === currentEmail;
-  const isEmailVerified = verification.status === 'verified' && verificationMatchesEmail && !!verification.token;
+  // El token es de un solo uso: si ya se consumió y los datos cambiaron (o la reserva
+  // pendiente ya no es reutilizable), hay que verificar de nuevo antes de continuar.
+  const currentFingerprint = JSON.stringify(buildIntentPayload());
+  const tokenSpent = verification.consumed
+    && (verification.consumedFingerprint === null || verification.consumedFingerprint !== currentFingerprint);
+  const isEmailVerified = verification.status === 'verified' && verificationMatchesEmail && !!verification.token && !tokenSpent;
   const codeSentToCurrentEmail = verificationMatchesEmail && ['sent', 'verifying'].includes(verification.status);
   const canContinue = !needsVerification || isEmailVerified;
 
   // ===== Datos de tarjeta =====
   const [cardData, setCardData] = useState(EMPTY_CARD);
-
-  // ===== Cupones =====
-  const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [couponError, setCouponError] = useState('');
 
   // ===== Fechas Reservadas (Bloqueadas) =====
   const [bookedIntervals, setBookedIntervals] = useState([]);
@@ -392,23 +420,10 @@ export default function CheckoutModal({
     setLoading(true);
     setErrorMessage(null);
 
-    const payload = {
-      room_id: room.id,
-      check_in: dates.check_in,
-      check_out: dates.check_out,
-      guest_name: guestData.guest_name.trim(),
-      guest_surname: guestData.guest_surname.trim(),
-      guest_email: guestData.guest_email.trim(),
-      document_type: guestData.document_type,
-      document_number: guestData.document_number.trim(),
-      guest_phone: guestData.guest_phone.trim() || undefined,
-      notes: guestData.notes.trim() || undefined,
-      companions: companions,
-      coupon_code: appliedCoupon ? appliedCoupon.code : null
-    };
+    const payload = buildIntentPayload();
 
     // Reutilizar la reserva pendiente si los datos no cambiaron (evita duplicados al reintentar)
-    const fingerprint = JSON.stringify(payload);
+    const fingerprint = currentFingerprint;
     if (intentRef.current.code && intentRef.current.fingerprint === fingerprint) {
       setBookingCode(intentRef.current.code);
       setCurrentStep(1);
@@ -418,8 +433,10 @@ export default function CheckoutModal({
 
     // SHE-026: sin sesión se envía el token de verificación (de un solo uso).
     if (needsVerification) {
-      if (!isEmailVerified || verification.consumed) {
-        resetVerification('Tus datos cambiaron: verifica tu correo nuevamente para continuar.');
+      if (!isEmailVerified) {
+        resetVerification(tokenSpent
+          ? 'Tus datos cambiaron: verifica tu correo nuevamente para continuar.'
+          : 'Verifica tu correo para continuar.');
         setLoading(false);
         return;
       }
@@ -429,13 +446,15 @@ export default function CheckoutModal({
     try {
       const result = await createCheckoutIntent(payload);
       intentRef.current = { fingerprint, code: result.booking_code };
-      if (needsVerification) setVerification((v) => ({ ...v, consumed: true }));
+      if (needsVerification) setVerification((v) => ({ ...v, consumed: true, consumedFingerprint: fingerprint }));
       setBookingCode(result.booking_code);
       setExpiresAt(result.expires_at || null);
       setCurrentStep(1); // Ir al formulario de tarjeta
     } catch (err) {
       logError('checkout:intent', err);
       if (err?.response?.data?.requires_verification) {
+        // Se fuerza el paso del código aunque haya sesión local; los datos ingresados se conservan.
+        setForceVerification(true);
         resetVerification('Verifica tu correo para continuar.');
         setErrorMessage('Verifica tu correo para continuar.');
         setFieldErrors({});
@@ -500,6 +519,8 @@ export default function CheckoutModal({
       if (status === 409 || status === 404 || status === 410) {
         // Reserva ya pagada o el bloqueo de 30 minutos expiró: hay que iniciar de nuevo
         intentRef.current = { fingerprint: null, code: null };
+        // El token ya se usó: la nueva reserva pendiente exige verificar otra vez.
+        setVerification((v) => (v.consumed ? { ...v, consumedFingerprint: null } : v));
         setBookingCode(null);
         setExpiresAt(null);
         setErrorMessage(`${apiErrorMessage(err, 'La reserva temporal expiró.')} Vuelva al paso anterior para iniciar nuevamente la reserva.`);
@@ -535,7 +556,11 @@ export default function CheckoutModal({
         {!isEmailVerified && (
           <>
             <p className="font-sans text-xs text-[#4d4635] mt-1">
-              Como no iniciaste sesión, confirmaremos que el correo es tuyo con un código de 6 dígitos.
+              {tokenSpent
+                ? 'El código anterior ya se usó para otra solicitud: pide un código nuevo para continuar.'
+                : forceVerification && auth?.user
+                  ? 'Para continuar, confirmaremos que el correo es tuyo con un código de 6 dígitos.'
+                  : 'Como no iniciaste sesión, confirmaremos que el correo es tuyo con un código de 6 dígitos.'}
             </p>
             <div className="flex flex-col sm:flex-row sm:items-end gap-2 mt-3">
               <button
