@@ -72,6 +72,11 @@ test.describe('Personal del hotel', () => {
     await expect(page.getByRole('link', { name: 'Cajas' }).first()).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('cell', { name: 'Recepción Demo', exact: true })).toBeVisible();
     await expect(page.getByText('Totales (2 cajas)')).toBeVisible();
+    await expect(page.getByText('Mostrando 1–2 de 2 cajas')).toBeVisible();
+    // Filtro por empleado: solo personal de caja, pedido con filtro de rol
+    const staffCall = calls.find((c) => c.key === 'GET /staff');
+    expect(new URLSearchParams(staffCall?.search).get('role')).toBe('admin,recepcionista');
+    await expect(page.getByLabel('Empleado').locator('option')).toHaveText(['Todos', 'Admin Demo', 'Recepción Demo']);
 
     await page.getByRole('button', { name: /Ver detalle de la caja 12/ }).click();
     const drawer = page.getByRole('dialog', { name: 'Caja #12' });

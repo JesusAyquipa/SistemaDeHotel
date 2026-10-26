@@ -1,30 +1,56 @@
 import { useState, useEffect } from 'react';
 import formatCurrency from '../../utils/formatCurrency';
 import useEscapeKey from '../../hooks/useEscapeKey';
+import { apiErrorMessage } from '../../utils/apiError';
+import { isCashSessionRequiredError } from '../../utils/cashSession';
+import CashSessionRequiredAlert from './CashSessionRequiredAlert';
 
+/**
+ * Registro de un pago en recepción.
+ * `onProcessPayment({ amount, method })` debe devolver una promesa: si se rechaza, el error
+ * se muestra aquí (incluido el 422 "Debes abrir caja…", con la opción de abrir la caja).
+ */
 export default function ProcessPaymentModal({ isOpen, onClose, onProcessPayment, totalAmount }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Efectivo');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [cashRequired, setCashRequired] = useState(false);
+  const [notice, setNotice] = useState('');
 
-  useEscapeKey(onClose, isOpen);
+  useEscapeKey(() => { if (!busy) onClose(); }, isOpen);
 
   useEffect(() => {
     if (isOpen) {
       setAmount(totalAmount > 0 ? totalAmount.toFixed(2) : '');
       setMethod('Efectivo');
+      setError('');
+      setCashRequired(false);
+      setNotice('');
     }
   }, [isOpen, totalAmount]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) return;
+    if (busy || !amount || parseFloat(amount) <= 0) return;
 
-    onProcessPayment({
-      amount: parseFloat(amount),
-      method: method
-    });
+    setBusy(true);
+    setError('');
+    setCashRequired(false);
+    setNotice('');
+    try {
+      await onProcessPayment({
+        amount: parseFloat(amount),
+        method: method
+      });
+    } catch (err) {
+      if (isCashSessionRequiredError(err)) setCashRequired(true);
+      else setError(apiErrorMessage(err, 'No se pudo registrar el pago. Intente nuevamente.'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -36,7 +62,7 @@ export default function ProcessPaymentModal({ isOpen, onClose, onProcessPayment,
           <h2 id="process-payment-title" className="font-serif text-xl font-bold text-white tracking-widest uppercase">
             Procesar Pago
           </h2>
-          <button type="button" onClick={onClose} className="text-[#a39f96] hover:text-white transition-colors" aria-label="Cerrar">
+          <button type="button" onClick={onClose} disabled={busy} className="text-[#a39f96] hover:text-white transition-colors" aria-label="Cerrar">
             <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
@@ -47,6 +73,22 @@ export default function ProcessPaymentModal({ isOpen, onClose, onProcessPayment,
             <span className="font-bold tracking-widest uppercase">Monto a Pagar:</span>
             <span className="text-lg font-bold">{formatCurrency(totalAmount)}</span>
           </div>
+
+          {cashRequired && (
+            <CashSessionRequiredAlert
+              className="mb-5"
+              onOpened={() => {
+                setCashRequired(false);
+                setNotice('Caja abierta. Ya puedes confirmar el pago.');
+              }}
+            />
+          )}
+          {error && (
+            <p role="alert" className="mb-5 bg-[#ffdad6] text-[#93000a] border border-[#ba1a1a]/30 p-3 font-mono text-xs font-bold">{error}</p>
+          )}
+          {notice && (
+            <p role="status" className="mb-5 bg-[#e8f5e9] text-[#1b5e20] border border-[#4caf50]/50 p-3 font-mono text-xs font-bold">{notice}</p>
+          )}
 
           <div className="space-y-5">
             <div>
@@ -95,15 +137,18 @@ export default function ProcessPaymentModal({ isOpen, onClose, onProcessPayment,
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-white hover:bg-gray-50 border border-[#d1c5af] text-[#2d2d2a] font-mono text-xs font-bold uppercase tracking-widest py-3 transition-colors"
+              disabled={busy}
+              className="flex-1 disabled:opacity-50 bg-white hover:bg-gray-50 border border-[#d1c5af] text-[#2d2d2a] font-mono text-xs font-bold uppercase tracking-widest py-3 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 bg-[#d32f2f] hover:bg-[#b71c1c] text-white font-mono text-xs font-bold uppercase tracking-widest py-3 transition-colors"
+              disabled={busy}
+              aria-busy={busy}
+              className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed bg-[#d32f2f] hover:bg-[#b71c1c] text-white font-mono text-xs font-bold uppercase tracking-widest py-3 transition-colors"
             >
-              Confirmar Pago
+              {busy ? 'Procesando…' : 'Confirmar Pago'}
             </button>
           </div>
         </form>

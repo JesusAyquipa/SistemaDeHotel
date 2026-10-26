@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import StaffLayout from '../../components/StaffLayout';
 import Toast from '../../components/Toast';
 import { getCashSession, listCashSessions } from '../../services/cashSessionService';
-import { getStaff } from '../../services/staffService';
+import { getStaffMembers } from '../../services/staffService';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { apiErrorMessage } from '../../utils/apiError';
 import formatCurrency from '../../utils/formatCurrency';
@@ -212,7 +212,7 @@ export default function CashSessionHistory() {
 
   useEffect(() => {
     let active = true;
-    getStaff()
+    getStaffMembers()
       .then((data) => { if (active) setUsers(Array.isArray(data) ? data : []); })
       .catch((err) => logError('cash-sessions:users', err));
     return () => { active = false; };

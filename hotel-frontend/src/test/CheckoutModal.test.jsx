@@ -275,4 +275,72 @@ describe('CheckoutModal: verificación de correo sin sesión (SHE-026)', () => {
     expect(screen.queryByText('Correo verificado')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
   });
+
+  it('con sesión local, si la API exige verificación (422) fuerza el código y conserva los datos', async () => {
+    createCheckoutIntent
+      .mockRejectedValueOnce({ response: { status: 422, data: { message: 'Verifica tu correo para continuar', requires_verification: true } } })
+      .mockResolvedValueOnce({ booking_code: 'RES-FORCED01', expires_at: null });
+    const { user } = renderModal({}, { auth: LOGGED_IN });
+    expect(screen.queryByRole('button', { name: 'Enviar código' })).not.toBeInTheDocument();
+    await fillGuest(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+
+    // Aparece el paso del código aunque exista auth.user, y los datos ingresados siguen ahí
+    expect(await screen.findByRole('button', { name: 'Enviar código' })).toBeEnabled();
+    expect(screen.getByText(/Para continuar, confirmaremos que el correo es tuyo/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Nombres *')).toHaveValue('Lucía');
+    expect(screen.getByLabelText('Correo Electrónico *')).toHaveValue('lucia@example.com');
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
+
+    await verifyEmail(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+    expect(createCheckoutIntent).toHaveBeenLastCalledWith(expect.objectContaining({
+      guest_name: 'Lucía',
+      verification_token: TOKEN,
+    }));
+    expect(await screen.findByLabelText(/Número de Tarjeta/)).toBeInTheDocument();
+  });
+
+  it('tras consumir el token, si cambian los datos bloquea continuar hasta verificar de nuevo', async () => {
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await verifyEmail(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+    await screen.findByLabelText(/Número de Tarjeta/);
+    expect(createCheckoutIntent).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: /Volver/ }));
+    // Mismos datos: se reutiliza la reserva pendiente, el botón sigue habilitado
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeEnabled();
+
+    await user.type(screen.getByLabelText('Apellidos *'), 'z');
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
+    expect(screen.getByText(/El código anterior ya se usó/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^(Reenviar|Enviar) código/ })).toBeInTheDocument();
+    expect(screen.queryByText('Correo verificado')).not.toBeInTheDocument();
+
+    // Al volver a los datos originales, la reserva pendiente vuelve a ser reutilizable
+    await user.type(screen.getByLabelText('Apellidos *'), '{Backspace}');
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+    expect(await screen.findByLabelText(/Número de Tarjeta/)).toBeInTheDocument();
+    expect(createCheckoutIntent).toHaveBeenCalledTimes(1);
+  });
+
+  it('si la reserva pendiente expira tras usar el token, exige verificar otra vez', async () => {
+    processMockPayment.mockRejectedValueOnce({ response: { status: 410, data: { message: 'La reserva temporal expiró.' } } });
+    const { user } = renderModal({}, { auth: ANONYMOUS });
+    await fillGuest(user);
+    await verifyEmail(user);
+    await user.click(screen.getByRole('button', { name: /Continuar al Pago Seguro/ }));
+    await user.type(await screen.findByLabelText(/Número de Tarjeta/), '4242424242424242');
+    await user.type(screen.getByLabelText(/Nombre del Titular/), 'Lucia Ramirez');
+    await user.type(screen.getByLabelText(/Expiración|Vencimiento|MM\/YY/i), futureYm().replace('/', ''));
+    await user.type(screen.getByLabelText(/CVC|CVV/i), '123');
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
+
+    expect(await screen.findByText(/Vuelva al paso anterior/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar al Pago Seguro/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^(Reenviar|Enviar) código/ })).toBeInTheDocument();
+  });
 });
