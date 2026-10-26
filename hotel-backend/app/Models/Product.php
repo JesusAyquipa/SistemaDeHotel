@@ -24,6 +24,8 @@ class Product extends Model
 
     protected $casts = [
         'tracks_stock' => 'boolean',
+        'stock'        => 'integer',   // casts tomados del commit 5bec1f7 (Jesús)
+        'is_active'    => 'boolean',
     ];
 
     public function charges()
