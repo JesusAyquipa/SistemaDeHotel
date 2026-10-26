@@ -27,6 +27,7 @@ export async function mockApi(page, { session = null, overrides = {} } = {}) {
 
   const rooms = fixture('rooms');
   const frontDesk = fixture('front-desk');
+  const cashSessions = fixture('cash-sessions');
 
   const routes = {
     'GET /ping': { message: 'pong' },
@@ -37,6 +38,18 @@ export async function mockApi(page, { session = null, overrides = {} } = {}) {
     'GET /staff/front-desk/today': frontDesk.today,
     'GET /staff/front-desk/rack': frontDesk.rack,
     'GET /staff/activity-logs': fixture('activity-logs'),
+    // SHE-014 / SHE-015: cajas
+    'GET /staff/cash-sessions/current': cashSessions.current,
+    'GET /staff/cash-sessions': cashSessions.list,
+    'GET /staff': { data: [USERS.admin, USERS.recepcionista] },
+    // SHE-026: verificación de correo para reservas sin cuenta
+    'POST /booking-verification/send': { message: 'Si el correo es válido, enviamos un código' },
+    'POST /booking-verification/verify': (req) => {
+      const { code } = req.postDataJSON() || {};
+      return code === '123456'
+        ? { body: { verification_token: 'e2e'.padEnd(64, '0'), expires_at: '2030-01-01T00:30:00Z' } }
+        : { status: 422, body: { message: 'Código inválido o vencido' } };
+    },
     'POST /logout': { message: 'ok' },
     'POST /login': (req) => {
       const { email } = req.postDataJSON() || {};
@@ -53,6 +66,7 @@ export async function mockApi(page, { session = null, overrides = {} } = {}) {
     [/^GET \/rooms\/\d+\/booked-dates$/, { booked_dates: [] }],
     [/^GET \/rooms\/\d+\/reviews$/, { data: [], summary: { count: 0, average: null }, meta: { current_page: 1, last_page: 1, total: 0 } }],
     [/^GET \/rooms\/\d+$/, fixture('room-detail')],
+    [/^GET \/staff\/cash-sessions\/\d+$/, cashSessions.detail],
   ];
 
   if (session) {

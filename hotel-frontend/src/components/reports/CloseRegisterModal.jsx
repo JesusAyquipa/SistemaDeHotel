@@ -5,7 +5,13 @@ import logError from '../../utils/logError';
 import formatCurrency from '../../utils/formatCurrency';
 import useEscapeKey from '../../hooks/useEscapeKey';
 
-export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount = 0 }) {
+/**
+ * Declaración de cierre de caja.
+ * - expectedAmount: total esperado (efectivo + vouchers) para mostrar la diferencia.
+ * - summary (opcional, SHE-014): resumen de la sesión de caja abierta
+ *   { opening_amount, cash_payments, card_payments, other_payments, expected_cash }.
+ */
+export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount = 0, summary = null }) {
   const [cashAmount, setCashAmount] = useState('');
   const [voucherAmount, setVoucherAmount] = useState('');
   const [loading, setLoading] = useState(false);
@@ -70,14 +76,23 @@ export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount 
 
             <div className="bg-[#f5f3ee] rounded-lg p-6 mb-6 flex flex-col gap-2 shadow-sm border border-[#d1c5af]">
               <h2 className="font-serif font-bold text-[#4d4635] uppercase tracking-wider text-xs mb-2">Resumen del Turno</h2>
-              <div className="flex justify-between items-center pb-2 border-b border-[#d1c5af]/50">
-                <span className="font-mono text-xs text-[#1b1c19]">Fondo Inicial</span>
-                <span className="font-mono text-sm text-[#1b1c19] font-bold">S/ 0.00</span>
-              </div>
-              <div className="flex justify-between items-center pb-2 border-b border-[#d1c5af]/50">
-                <span className="font-mono text-xs text-[#1b1c19]">Ingresos en Sistema</span>
-                <span className="font-mono text-sm text-[#1b1c19] font-bold">{formatCurrency(expectedAmount)}</span>
-              </div>
+              {(summary
+                ? [
+                    ['Fondo Inicial', summary.opening_amount],
+                    ['Cobros en Efectivo', summary.cash_payments],
+                    ['Cobros con Tarjeta / Vouchers', summary.card_payments],
+                    ...(Number(summary.other_payments) > 0 ? [['Otros Medios (no se declaran)', summary.other_payments]] : []),
+                  ]
+                : [
+                    ['Fondo Inicial', 0],
+                    ['Ingresos en Sistema', expectedAmount],
+                  ]
+              ).map(([label, amount]) => (
+                <div key={label} className="flex justify-between items-center gap-4 pb-2 border-b border-[#d1c5af]/50">
+                  <span className="font-mono text-xs text-[#1b1c19]">{label}</span>
+                  <span className="font-mono text-sm text-[#1b1c19] font-bold whitespace-nowrap">{formatCurrency(amount)}</span>
+                </div>
+              ))}
               <div className="flex justify-between items-center pt-2">
                 <span className="font-mono text-sm text-[#1b1c19] font-bold">Total Esperado</span>
                 <span className="font-mono text-[#755b00] font-bold text-lg">{formatCurrency(expectedAmount)}</span>

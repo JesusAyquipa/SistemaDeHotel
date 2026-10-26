@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef, useId, useContext } from 'react';
 import { createCheckoutIntent, processMockPayment } from '../services/paymentService';
+import { sendBookingVerificationCode, verifyBookingCode } from '../services/bookingVerificationService';
+import { AuthContext } from '../context/AuthContext';
 import { getRoomBookedDates } from '../services/rooms';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -36,6 +38,13 @@ const STEPS = [
 ];
 
 const NAME_REGEX = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+const EMAIL_REGEX = /\S+@\S+\.\S+/;
+const RESEND_SECONDS = 60;
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+// SHE-026: estado de la verificación del correo para reservas sin cuenta.
+// status: idle | sending | sent | verifying | verified
+const INITIAL_VERIFICATION = { status: 'idle', email: '', token: null, message: '', error: '', consumed: false };
 const REPEATING_REGEX = /(.)\1{2,}/;
 
 function StepIndicator({ currentStep }) {
@@ -107,6 +116,27 @@ export default function CheckoutModal({
   });
 
   const [companions, setCompanions] = useState([]);
+
+  // ===== Verificación del correo (SHE-026, solo sin sesión) =====
+  const auth = useContext(AuthContext);
+  const needsVerification = !auth?.loading && !auth?.user;
+  const [verification, setVerification] = useState(INITIAL_VERIFICATION);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [resendIn, setResendIn] = useState(0);
+  const codeInputRef = useRef(null);
+
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const t = setTimeout(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const currentEmail = normalizeEmail(guestData.guest_email);
+  // Si el huésped cambia el correo, la verificación anterior deja de valer.
+  const verificationMatchesEmail = verification.email !== '' && verification.email === currentEmail;
+  const isEmailVerified = verification.status === 'verified' && verificationMatchesEmail && !!verification.token;
+  const codeSentToCurrentEmail = verificationMatchesEmail && ['sent', 'verifying'].includes(verification.status);
+  const canContinue = !needsVerification || isEmailVerified;
 
   // ===== Datos de tarjeta =====
   const [cardData, setCardData] = useState(EMPTY_CARD);
@@ -221,6 +251,79 @@ export default function CheckoutModal({
     setCouponError('');
   };
 
+  // ===== Verificación del correo (SHE-026) =====
+  const resendBlocked = resendIn > 0 && verificationMatchesEmail;
+  const canSendCode = EMAIL_REGEX.test(guestData.guest_email.trim())
+    && verification.status !== 'sending'
+    && !resendBlocked
+    && !isEmailVerified;
+
+  const handleSendCode = async () => {
+    if (!EMAIL_REGEX.test(guestData.guest_email.trim())) {
+      setFieldErrors((prev) => ({ ...prev, guest_email: 'Ingrese un correo electrónico válido' }));
+      return;
+    }
+    if (!canSendCode) return;
+    const email = currentEmail;
+    setVerification({ ...INITIAL_VERIFICATION, status: 'sending', email });
+    setVerificationCode('');
+    try {
+      await sendBookingVerificationCode(email);
+      setVerification({
+        ...INITIAL_VERIFICATION,
+        status: 'sent',
+        email,
+        message: `Si el correo es válido, enviamos un código de 6 dígitos a ${email}. Revisa también la carpeta de spam.`,
+      });
+      setResendIn(RESEND_SECONDS);
+      setTimeout(() => codeInputRef.current?.focus(), 0);
+    } catch (err) {
+      logError('checkout:verification-send', err);
+      const status = apiStatus(err);
+      setVerification({
+        ...INITIAL_VERIFICATION,
+        email,
+        error: status === 429
+          ? 'Solicitaste demasiados códigos. Espera unos minutos e inténtalo de nuevo.'
+          : 'No pudimos enviar el código. Inténtalo nuevamente.',
+      });
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    const code = verificationCode.trim();
+    if (!/^\d{6}$/.test(code)) {
+      setVerification((v) => ({ ...v, error: 'El código tiene 6 dígitos.' }));
+      return;
+    }
+    const email = verification.email;
+    setVerification((v) => ({ ...v, status: 'verifying', error: '' }));
+    try {
+      const result = await verifyBookingCode(email, code);
+      if (!result?.verification_token) throw new Error('missing token');
+      setVerification({ ...INITIAL_VERIFICATION, status: 'verified', email, token: result.verification_token });
+      setVerificationCode('');
+    } catch (err) {
+      logError('checkout:verification-verify', err);
+      const status = apiStatus(err);
+      setVerification((v) => ({
+        ...v,
+        status: 'sent',
+        error: status === 422
+          ? 'Código inválido o vencido. Revisa el correo o solicita uno nuevo.'
+          : status === 429
+            ? 'Demasiados intentos. Espera un momento antes de volver a intentarlo.'
+            : 'No pudimos verificar el código. Inténtalo nuevamente.',
+      }));
+    }
+  };
+
+  const resetVerification = (error = '') => {
+    setVerification({ ...INITIAL_VERIFICATION, error });
+    setVerificationCode('');
+    setResendIn(0);
+  };
+
   // ===== Validación del Paso 0 (Resumen + Huésped) =====
   const validateStep0 = () => {
     const errors = {};
@@ -313,14 +416,31 @@ export default function CheckoutModal({
       return;
     }
 
+    // SHE-026: sin sesión se envía el token de verificación (de un solo uso).
+    if (needsVerification) {
+      if (!isEmailVerified || verification.consumed) {
+        resetVerification('Tus datos cambiaron: verifica tu correo nuevamente para continuar.');
+        setLoading(false);
+        return;
+      }
+      payload.verification_token = verification.token;
+    }
+
     try {
       const result = await createCheckoutIntent(payload);
       intentRef.current = { fingerprint, code: result.booking_code };
+      if (needsVerification) setVerification((v) => ({ ...v, consumed: true }));
       setBookingCode(result.booking_code);
       setExpiresAt(result.expires_at || null);
       setCurrentStep(1); // Ir al formulario de tarjeta
     } catch (err) {
       logError('checkout:intent', err);
+      if (err?.response?.data?.requires_verification) {
+        resetVerification('Verifica tu correo para continuar.');
+        setErrorMessage('Verifica tu correo para continuar.');
+        setFieldErrors({});
+        return;
+      }
       const apiMsg = apiErrorMessage(err, 'No se pudo iniciar el proceso de pago. Verifique los datos e intente nuevamente.');
       const apiErrors = err.response?.data?.errors || {};
       setErrorMessage(apiMsg);
@@ -391,6 +511,103 @@ export default function CheckoutModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  // ===== Bloque de verificación del correo (SHE-026) =====
+  const renderEmailVerification = () => {
+    const sending = verification.status === 'sending';
+    const verifying = verification.status === 'verifying';
+    return (
+      <div className="sm:col-span-2 bg-[#fbf9f4] border border-[#d1c5af] p-3" role="group" aria-labelledby={fid('verify-title')}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p id={fid('verify-title')} className="font-mono text-[11px] uppercase font-bold text-[#14213d] flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm text-[#755b00]" aria-hidden="true">mark_email_read</span>
+            Verificación del correo
+          </p>
+          {isEmailVerified && (
+            <span role="status" className="inline-flex items-center gap-1 bg-[#e8f5e9] text-[#1b5e20] border border-[#4caf50]/50 px-2 py-0.5 font-mono text-[10px] font-bold uppercase">
+              <span className="material-symbols-outlined text-sm" aria-hidden="true">verified</span>
+              Correo verificado
+            </span>
+          )}
+        </div>
+
+        {!isEmailVerified && (
+          <>
+            <p className="font-sans text-xs text-[#4d4635] mt-1">
+              Como no iniciaste sesión, confirmaremos que el correo es tuyo con un código de 6 dígitos.
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2 mt-3">
+              <button
+                type="button"
+                onClick={handleSendCode}
+                disabled={!canSendCode}
+                aria-busy={sending}
+                className="min-h-[40px] px-4 py-2 bg-[#14213d] hover:bg-[#0a1628] text-[#fbf9f4] font-mono text-[11px] uppercase tracking-wider font-bold border border-[#c9a227] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              >
+                {sending
+                  ? 'Enviando…'
+                  : resendBlocked
+                    ? `Reenviar código (${resendIn} s)`
+                    : codeSentToCurrentEmail ? 'Reenviar código' : 'Enviar código'}
+              </button>
+
+              {codeSentToCurrentEmail && (
+                <div className="flex flex-1 items-end gap-2">
+                  <div className="flex-1 min-w-0">
+                    <label htmlFor={fid('verification_code')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">
+                      Código de verificación
+                    </label>
+                    <input
+                      ref={codeInputRef}
+                      id={fid('verification_code')}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      placeholder="000000"
+                      value={verificationCode}
+                      onChange={(e) => {
+                        setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                        if (verification.error) setVerification((v) => ({ ...v, error: '' }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleVerifyCode();
+                        }
+                      }}
+                      aria-invalid={!!verification.error}
+                      aria-describedby={verification.error ? fid('verify-error') : fid('verify-msg')}
+                      className="w-full bg-white border border-[#d1c5af] p-2 font-mono text-base tracking-[0.4em] text-[#1b1c19] focus:border-[#14213d] focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleVerifyCode}
+                    disabled={verifying || verificationCode.length !== 6}
+                    aria-busy={verifying}
+                    className="min-h-[40px] px-4 py-2 bg-[#c9a227] hover:bg-[#b08b1a] text-[#14213d] font-mono text-[11px] uppercase tracking-wider font-bold border border-[#14213d] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+                  >
+                    {verifying ? 'Verificando…' : 'Verificar'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div aria-live="polite" className="mt-2 space-y-1">
+          {!isEmailVerified && verification.message && verificationMatchesEmail && (
+            <p id={fid('verify-msg')} className="font-mono text-[10px] text-[#4d4635] break-words">{verification.message}</p>
+          )}
+          {verification.error && (
+            <p id={fid('verify-error')} role="alert" className="font-mono text-[10px] font-bold text-[#ba1a1a]">{verification.error}</p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // ===== PASO 0: Resumen + Datos del Huésped =====
@@ -636,6 +853,7 @@ export default function CheckoutModal({
                 <input id={fid('guest_phone')} type="tel" name="guest_phone" autoComplete="tel" placeholder="+51 987 654 321" value={guestData.guest_phone} onChange={handleGuestChange}
                   className="w-full bg-[#fbf9f4] border border-[#d1c5af] p-2 text-xs font-mono text-[#1b1c19] focus:border-[#14213d] focus:outline-none" />
               </div>
+              {needsVerification && renderEmailVerification()}
               <div className="sm:col-span-2">
                 <label htmlFor={fid('notes')} className="block font-mono text-[11px] uppercase font-bold text-[#4d4635] mb-1">Peticiones Especiales (Opcional)</label>
                 <textarea id={fid('notes')} name="notes" rows="2" placeholder="Horario estimado de llegada, preferencias de piso, etc."
@@ -1047,7 +1265,13 @@ export default function CheckoutModal({
             className="w-full sm:w-auto px-5 py-2.5 bg-transparent border border-[#d1c5af] hover:border-[#14213d] text-[#14213d] font-mono text-xs uppercase tracking-wider font-bold transition-all cursor-pointer disabled:opacity-50">
             Cancelar
           </button>
-          <button type="button" onClick={handleContinueToPayment} disabled={loading}
+          {!canContinue && (
+            <p id={fid('continue-hint')} className="w-full sm:w-auto sm:flex-1 text-center sm:text-right font-mono text-[10px] text-[#4d4635]">
+              Verifica tu correo para continuar.
+            </p>
+          )}
+          <button type="button" onClick={handleContinueToPayment} disabled={loading || !canContinue}
+            aria-describedby={!canContinue ? fid('continue-hint') : undefined}
             className="w-full sm:w-auto px-8 py-3 bg-[#c9a227] hover:bg-[#b08b1a] text-[#14213d] font-mono text-xs uppercase tracking-widest font-bold border border-[#14213d] shadow-[2px_2px_0px_#14213d] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
             {loading ? (
               <>

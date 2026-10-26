@@ -34,6 +34,7 @@ const FrontDeskToday = lazy(() => import('../pages/staff/FrontDeskToday'));
 const FrontDeskRack = lazy(() => import('../pages/staff/FrontDeskRack'));
 const InvoiceManagement = lazy(() => import('../pages/admin/InvoiceManagement'));
 const RefundManagement = lazy(() => import('../pages/admin/RefundManagement'));
+const CashSessionHistory = lazy(() => import('../pages/admin/CashSessionHistory'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
 export default function AppRoutes() {
@@ -129,6 +130,12 @@ export default function AppRoutes() {
         <Route path="/admin/reembolsos" element={
           <ProtectedRoute allowedRoles={['admin']}>
             <RefundManagement />
+          </ProtectedRoute>
+        } />
+        {/* Historial de cajas (SHE-015) */}
+        <Route path="/admin/cajas" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <CashSessionHistory />
           </ProtectedRoute>
         } />
         <Route path="/configuracion" element={

@@ -22,3 +22,21 @@ export function formatDmy(value) {
   if (!y || !m || !d) return '—';
   return `${d}/${m}/${y}`;
 }
+
+/** Fecha y hora ISO a 'DD/MM/YYYY, HH:MM' (hora local); '—' si está vacío o es inválido. */
+export function formatDateTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('es-PE', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** Solo la hora 'HH:MM' de una fecha ISO; '—' si es inválida. */
+export function formatTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+}

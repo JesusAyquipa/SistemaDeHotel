@@ -1,0 +1,58 @@
+{
+  "current": {
+    "session": null,
+    "summary": { "opening_amount": 0, "cash_payments": 0, "card_payments": 0, "other_payments": 0, "expected_cash": 0 }
+  },
+  "list": {
+    "data": [
+      {
+        "id": 12,
+        "user": { "id": 2, "name": "Recepción Demo" },
+        "opened_at": "2030-05-10T08:00:00-05:00",
+        "closed_at": "2030-05-10T16:05:00-05:00",
+        "status": "closed",
+        "opening_amount": "100.00",
+        "expected_amount": "450.00",
+        "counted_amount": "440.00",
+        "difference": "-10.00",
+        "notes": "Faltante por vuelto"
+      },
+      {
+        "id": 13,
+        "user": { "id": 1, "name": "Admin Demo" },
+        "opened_at": "2030-05-11T08:00:00-05:00",
+        "closed_at": null,
+        "status": "open",
+        "opening_amount": "50.00",
+        "expected_amount": null,
+        "counted_amount": null,
+        "difference": null,
+        "notes": null
+      }
+    ],
+    "current_page": 1,
+    "last_page": 1,
+    "per_page": 20,
+    "total": 2,
+    "from": 1,
+    "to": 2,
+    "meta": { "totals": { "expected": "450.00", "counted": "440.00", "difference": "-10.00" } }
+  },
+  "detail": {
+    "session": {
+      "id": 12,
+      "user": { "id": 2, "name": "Recepción Demo" },
+      "opened_at": "2030-05-10T08:00:00-05:00",
+      "closed_at": "2030-05-10T16:05:00-05:00",
+      "status": "closed",
+      "opening_amount": "100.00",
+      "expected_amount": "450.00",
+      "counted_amount": "440.00",
+      "difference": "-10.00",
+      "notes": "Faltante por vuelto",
+      "payments": [
+        { "id": 501, "booking_code": "RES-E2EINH02", "payment_method": "cash", "amount": "350.00", "created_at": "2030-05-10T10:15:00-05:00" }
+      ]
+    }
+  }
+}
