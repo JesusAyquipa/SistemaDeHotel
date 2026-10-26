@@ -77,6 +77,8 @@ class BookingPricingService
                 'start'   => Carbon::parse(data_get($season, 'start_date'))->toDateString(),
                 'end'     => Carbon::parse(data_get($season, 'end_date'))->toDateString(),
                 'percent' => (float) data_get($season, 'rate_adjustment', 0),
+                // SHE-018: null/vacío = todos los días; si no, solo esos días (0 = domingo .. 6 = sábado)
+                'days'    => self::normalizeDays(data_get($season, 'days_of_week')),
             ];
         }
 
@@ -94,8 +96,10 @@ class BookingPricingService
         for ($date = $in->copy(); $date->lt($out); $date->addDay()) {
             $day = $date->toDateString();
             $applied = null;
+            $weekday = (int) $date->dayOfWeek; // 0 = domingo .. 6 = sábado
             foreach ($normalized as $season) {
-                if ($season['start'] <= $day && $day <= $season['end']) {
+                if ($season['start'] <= $day && $day <= $season['end']
+                    && ($season['days'] === null || in_array($weekday, $season['days'], true))) {
                     $applied = $season;
                     break;
                 }
@@ -133,6 +137,28 @@ class BookingPricingService
             'igv'               => self::igvBreakdown($total),
             'currency'          => 'PEN',
         ];
+    }
+
+    /**
+     * Normaliza days_of_week: null/vacío/inválido => null (todos los días); si no, lista de enteros 0..6.
+     */
+    private static function normalizeDays($days): ?array
+    {
+        if (is_string($days)) {
+            $days = json_decode($days, true);
+        }
+        if (!is_array($days) || $days === []) {
+            return null;
+        }
+
+        $valid = [];
+        foreach ($days as $d) {
+            if (is_numeric($d) && (int) $d >= 0 && (int) $d <= 6) {
+                $valid[] = (int) $d;
+            }
+        }
+
+        return $valid === [] ? null : array_values(array_unique($valid));
     }
 
     /**
