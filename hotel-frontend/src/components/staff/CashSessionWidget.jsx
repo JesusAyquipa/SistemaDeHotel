@@ -4,6 +4,7 @@ import CloseRegisterModal from '../reports/CloseRegisterModal';
 import Toast from '../Toast';
 import { getCurrentCashSession, openCashSession } from '../../services/cashSessionService';
 import { apiErrorMessage, apiStatus } from '../../utils/apiError';
+import { expectedDeclaredTotal } from '../../utils/cashSession';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatDateTime, formatTime } from '../../utils/dates';
 import logError from '../../utils/logError';
@@ -13,23 +14,22 @@ const STAFF_ROLES = ['admin', 'recepcionista'];
 
 const btn = 'inline-flex items-center justify-center gap-2 px-4 py-2.5 font-mono text-xs uppercase tracking-wider font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
-/** Total que debe declararse al cerrar: efectivo esperado (fondo + cobros) + vouchers. */
-function expectedDeclaredTotal(summary) {
-  if (!summary) return 0;
-  return (Number(summary.expected_cash) || 0) + (Number(summary.card_payments) || 0);
-}
-
-function OpenCashModal({ onClose, onOpened }) {
+/** Modal para abrir la caja del usuario. También lo usa CashSessionRequiredAlert. */
+export function OpenCashModal({ onClose, onOpened }) {
   const uid = useId();
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  useEscapeKey(() => { if (!busy) onClose(); });
+  // Exclusivo: puede abrirse encima de otro modal (cobro) y Escape solo debe cerrar este.
+  useEscapeKey(() => { if (!busy) onClose(); }, true, { exclusive: true });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Si se abre desde un portal dentro de otro formulario (cobro), el submit de React
+    // burbujea por el árbol de componentes: no debe disparar el formulario de fondo.
+    e.stopPropagation();
     const value = Number(amount);
     if (amount === '' || !Number.isFinite(value) || value < 0) {
       setError('Ingresa un monto inicial válido (0 o más).');
@@ -160,6 +160,8 @@ export default function CashSessionWidget({ onNotify, onClosed, className = '' }
   const { loading, error, session, summary } = state;
   const isOpen = !!session && session.status !== 'closed';
   const openingAmount = summary?.opening_amount ?? session?.opening_amount ?? 0;
+  const otherPayments = Number(summary?.other_payments) || 0;
+  const onlinePayments = Number(summary?.online_payments) || 0;
 
   return (
     <section
@@ -221,6 +223,22 @@ export default function CashSessionWidget({ onNotify, onClosed, className = '' }
                 <dt className="font-mono text-[10px] uppercase tracking-wider text-[#4d4635] font-bold">Efectivo esperado</dt>
                 <dd className="font-serif text-xl font-bold text-[#755b00] tabular-nums" data-testid="expected-cash">{formatCurrency(summary?.expected_cash ?? openingAmount)}</dd>
               </div>
+              {otherPayments > 0 && (
+                <div className="min-w-0">
+                  <dt className="font-mono text-[10px] uppercase tracking-wider text-[#4d4635] font-bold">Otros medios</dt>
+                  <dd className="font-mono text-sm text-[#1b1c19] tabular-nums">{formatCurrency(otherPayments)}</dd>
+                </div>
+              )}
+              <div className="min-w-0">
+                <dt className="font-mono text-[10px] uppercase tracking-wider text-[#4d4635] font-bold">Total a declarar</dt>
+                <dd className="font-mono text-sm font-bold text-[#14213d] tabular-nums" data-testid="expected-total">{formatCurrency(expectedDeclaredTotal(summary) || openingAmount)}</dd>
+              </div>
+              {onlinePayments > 0 && (
+                <div className="col-span-2 sm:col-span-4 min-w-0 flex flex-wrap items-baseline gap-x-2 border-t border-[#e4e2dd] pt-2" data-testid="online-payments">
+                  <dt className="font-mono text-[10px] uppercase tracking-wider text-[#4d4635] font-bold">Pagos en línea (no van a caja)</dt>
+                  <dd className="font-mono text-sm text-[#4d4635] tabular-nums">{formatCurrency(onlinePayments)}</dd>
+                </div>
+              )}
             </dl>
           )}
         </div>

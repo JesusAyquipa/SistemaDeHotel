@@ -70,14 +70,31 @@ export function normalizeCashSessionList(raw) {
     }
     return 0;
   };
+  const items = Array.isArray(data.data) ? data.data : [];
+  const currentPage = Number(source.current_page) || 1;
+  const total = Number(source.total) || 0;
+  // meta.from / meta.to si el servidor los envía; si no, se calculan con current_page/per_page.
+  const rawFrom = meta.from ?? data.from;
+  const rawTo = meta.to ?? data.to;
+  let from = 0;
+  let to = 0;
+  if (rawFrom !== undefined && rawFrom !== null && rawTo !== undefined && rawTo !== null) {
+    from = Number(rawFrom) || 0;
+    to = Number(rawTo) || 0;
+  } else if (items.length > 0) {
+    const perPage = Number(meta.per_page ?? data.per_page) || items.length;
+    from = (currentPage - 1) * perPage + 1;
+    to = from + items.length - 1;
+    if (total > 0) to = Math.min(to, total);
+  }
   return {
-    items: Array.isArray(data.data) ? data.data : [],
+    items,
     pagination: {
-      current_page: Number(source.current_page) || 1,
+      current_page: currentPage,
       last_page: Number(source.last_page) || 1,
-      total: Number(source.total) || 0,
-      from: Number(source.from) || 0,
-      to: Number(source.to) || 0,
+      total,
+      from,
+      to,
     },
     totals: {
       expected: pick('expected', 'expected_amount', 'total_expected', 'sum_expected'),

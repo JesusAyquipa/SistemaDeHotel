@@ -1,7 +1,7 @@
 {
   "current": {
     "session": null,
-    "summary": { "opening_amount": 0, "cash_payments": 0, "card_payments": 0, "other_payments": 0, "expected_cash": 0 }
+    "summary": { "opening_amount": 0, "cash_payments": 0, "card_payments": 0, "other_payments": 0, "expected_cash": 0, "online_payments": 0 }
   },
   "list": {
     "data": [
@@ -30,13 +30,15 @@
         "notes": null
       }
     ],
-    "current_page": 1,
-    "last_page": 1,
-    "per_page": 20,
-    "total": 2,
-    "from": 1,
-    "to": 2,
-    "meta": { "totals": { "expected": "450.00", "counted": "440.00", "difference": "-10.00" } }
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "per_page": 20,
+      "total": 2,
+      "from": 1,
+      "to": 2,
+      "totals": { "expected_amount": 450, "counted_amount": 440, "difference": -10 }
+    }
   },
   "detail": {
     "session": {

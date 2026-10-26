@@ -4,6 +4,8 @@ import { createCheckoutIntent, processMockPayment } from '../../services/payment
 import { createBooking, updateBooking } from '../../services/bookingService';
 import CardFields from '../CardFields';
 import GuestSearchBox from './GuestSearchBox';
+import CashSessionRequiredAlert from './CashSessionRequiredAlert';
+import { isCashSessionRequiredError } from '../../utils/cashSession';
 import { EMPTY_CARD, validateCard, cardPayload } from '../../utils/card';
 import { validateCoupon, couponDiscount } from '../../utils/coupon';
 import { apiErrorMessage, apiStatus } from '../../utils/apiError';
@@ -85,6 +87,9 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
 
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  // 422 "Debes abrir caja antes de registrar cobros": se ofrece abrir la caja sin perder el formulario
+  const [cashRequired, setCashRequired] = useState(false);
+  const [cashNotice, setCashNotice] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Reutilizar el checkout intent si se reintenta con los mismos datos
@@ -243,7 +248,8 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
       if (onSuccess) onSuccess(response);
     } catch (err) {
       logError('edit-booking:update', err);
-      setError(updateErrorMessage(err));
+      if (isCashSessionRequiredError(err)) setCashRequired(true);
+      else setError(updateErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -328,7 +334,8 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
       if (onSuccess) onSuccess();
     } catch (err) {
       logError('edit-booking:create', err);
-      setError(apiErrorMessage(err, 'Error al procesar el cobro o la reserva.'));
+      if (isCashSessionRequiredError(err)) setCashRequired(true);
+      else setError(apiErrorMessage(err, 'Error al procesar el cobro o la reserva.'));
     } finally {
       setLoading(false);
     }
@@ -337,6 +344,8 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
   const handleSubmit = (e) => {
     e?.preventDefault();
     setError('');
+    setCashRequired(false);
+    setCashNotice('');
     if (isEdit) submitEdit();
     else submitCreate();
   };
@@ -483,6 +492,17 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
             <div role="alert" className="bg-[#ba1a1a]/10 text-[#ba1a1a] p-4 border border-[#ba1a1a]/20 font-mono text-sm">
               {error}
             </div>
+          )}
+          {cashRequired && (
+            <CashSessionRequiredAlert
+              onOpened={() => {
+                setCashRequired(false);
+                setCashNotice('Caja abierta. Vuelve a confirmar para registrar el cobro.');
+              }}
+            />
+          )}
+          {cashNotice && (
+            <p role="status" className="bg-[#e8f5e9] text-[#1b5e20] border border-[#4caf50]/50 p-3 font-mono text-xs font-bold">{cashNotice}</p>
           )}
 
           {isEdit && (

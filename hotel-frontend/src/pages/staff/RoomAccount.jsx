@@ -177,21 +177,22 @@ export default function RoomAccount() {
     }
   };
 
+  // Los errores (incluido el 422 "Debes abrir caja antes de registrar cobros") se
+  // relanzan para que ProcessPaymentModal los muestre sin cerrarse.
   const handleProcessPayment = async (paymentData) => {
     if (!activeBooking) return;
-    notify(`Procesando pago por ${formatCurrency(paymentData.amount)}...`, 'info');
     try {
       await api.post(`/staff/bookings/${activeBooking.id}/pay`, {
         amount: paymentData.amount,
         method: paymentData.method,
       });
-      notify(`¡Pago de ${formatCurrency(paymentData.amount)} procesado con éxito!`);
-      setIsProcessPaymentOpen(false);
-      await loadFolio(activeBooking.id);
     } catch (err) {
       logError('folio:pay', err);
-      notify(`Error al procesar pago: ${apiErrorMessage(err, 'intente nuevamente.')}`, 'error');
+      throw err;
     }
+    notify(`¡Pago de ${formatCurrency(paymentData.amount)} procesado con éxito!`);
+    setIsProcessPaymentOpen(false);
+    await loadFolio(activeBooking.id);
   };
 
   return (

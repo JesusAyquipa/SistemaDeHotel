@@ -9,7 +9,9 @@ import useEscapeKey from '../../hooks/useEscapeKey';
  * Declaración de cierre de caja.
  * - expectedAmount: total esperado (efectivo + vouchers) para mostrar la diferencia.
  * - summary (opcional, SHE-014): resumen de la sesión de caja abierta
- *   { opening_amount, cash_payments, card_payments, other_payments, expected_cash }.
+ *   { opening_amount, cash_payments, card_payments, other_payments, expected_cash, online_payments? }.
+ *   El total esperado incluye efectivo + tarjeta + otros medios; los pagos en línea
+ *   (online_payments) se muestran solo como referencia: no van a caja.
  */
 export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount = 0, summary = null }) {
   const [cashAmount, setCashAmount] = useState('');
@@ -81,7 +83,7 @@ export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount 
                     ['Fondo Inicial', summary.opening_amount],
                     ['Cobros en Efectivo', summary.cash_payments],
                     ['Cobros con Tarjeta / Vouchers', summary.card_payments],
-                    ...(Number(summary.other_payments) > 0 ? [['Otros Medios (no se declaran)', summary.other_payments]] : []),
+                    ...(Number(summary.other_payments) > 0 ? [['Otros Medios (transferencia, etc.)', summary.other_payments]] : []),
                   ]
                 : [
                     ['Fondo Inicial', 0],
@@ -97,6 +99,12 @@ export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount 
                 <span className="font-mono text-sm text-[#1b1c19] font-bold">Total Esperado</span>
                 <span className="font-mono text-[#755b00] font-bold text-lg">{formatCurrency(expectedAmount)}</span>
               </div>
+              {Number(summary?.online_payments) > 0 && (
+                <div className="flex justify-between items-center gap-4 pt-2 border-t border-dashed border-[#d1c5af]">
+                  <span className="font-mono text-xs text-[#4d4635]">Pagos en línea (no van a caja)</span>
+                  <span className="font-mono text-sm text-[#4d4635] whitespace-nowrap">{formatCurrency(summary.online_payments)}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-6 mb-8">
@@ -122,7 +130,7 @@ export default function CloseRegisterModal({ onClose, onSuccess, expectedAmount 
 
               <div className="relative">
                 <label className="block font-mono text-[11px] text-[#4d4635] uppercase font-bold mb-1" htmlFor="vouchers">
-                  Total en Vouchers (Visa/MC)
+                  Total en Vouchers (Visa/MC) y otros medios
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[#4d4635]">S/</span>

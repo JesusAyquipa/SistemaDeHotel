@@ -133,6 +133,28 @@ describe('CashSessionWidget (SHE-014)', () => {
     expect(await within(dialog).findByText('Debes abrir caja antes de cerrarla')).toBeInTheDocument();
   });
 
+  it('el total a declarar suma efectivo, tarjeta y otros medios; los pagos en línea son informativos', async () => {
+    getCurrentCashSession.mockResolvedValue({
+      session: OPEN_SESSION.session,
+      summary: { ...OPEN_SESSION.summary, other_payments: 49.5, online_payments: 1200 },
+    });
+    const { user } = renderWidget({ onNotify: vi.fn() });
+    await screen.findByRole('button', { name: /Cerrar caja/ });
+    // 350.50 + 300 + 49.50
+    expect(normalize(screen.getByTestId('expected-total').textContent)).toBe('S/ 700.00');
+    expect(normalize(screen.getByText('Otros medios').nextSibling.textContent)).toBe('S/ 49.50');
+    const online = screen.getByTestId('online-payments');
+    expect(online).toHaveTextContent('Pagos en línea (no van a caja)');
+    expect(normalize(online.textContent)).toContain('S/ 1,200.00');
+
+    await user.click(screen.getByRole('button', { name: /Cerrar caja/ }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByText(/no se declaran/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Otros Medios/)).toBeInTheDocument();
+    expect(normalize(within(dialog).getByText('Total Esperado').nextSibling.textContent)).toBe('S/ 700.00');
+    expect(within(dialog).getByText('Pagos en línea (no van a caja)')).toBeInTheDocument();
+  });
+
   it('error al consultar la caja: mensaje genérico y reintento', async () => {
     getCurrentCashSession.mockRejectedValueOnce({ response: { status: 500, data: { message: 'stack trace' } } });
     const { user } = renderWidget();
