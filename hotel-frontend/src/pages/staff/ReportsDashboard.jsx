@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import StaffSidebar from '../../components/StaffSidebar';
 import CloseRegisterModal from '../../components/reports/CloseRegisterModal';
+import CashRegisterClosureHistory from '../../components/reports/CashRegisterClosureHistory';
 import { ROOM_TYPE_LABELS } from '../../constants/rooms';
 import { getDashboardReports, getReportStats } from '../../services/reportService';
 import { HOTEL_NAME } from '../../constants/hotel';
@@ -71,6 +72,7 @@ export default function ReportsDashboard() {
   const [error, setError] = useState('');
 
   const [isCloseRegisterModalOpen, setCloseRegisterModalOpen] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -392,6 +394,9 @@ export default function ReportsDashboard() {
                   Realizar Cierre de Caja
                 </button>
               </div>
+
+              {/* Historial de Cierres de Caja para Auditoría (SHE-015) */}
+              <CashRegisterClosureHistory key={historyVersion} />
             </>
           )}
 
@@ -404,8 +409,8 @@ export default function ReportsDashboard() {
           onClose={() => setCloseRegisterModalOpen(false)}
           onSuccess={() => {
             setCloseRegisterModalOpen(false);
-            // Mostrar alguna notificación de éxito y recargar si se desea
             fetchReports();
+            setHistoryVersion((v) => v + 1);
           }}
           expectedAmount={Number(data?.unreconciled_revenue || 0)}
         />

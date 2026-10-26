@@ -64,6 +64,8 @@ services:
       BROADCAST_CONNECTION: log
       PAYMENT_GATEWAY: simulation
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-local-webhook-secret}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-password123}
+      SEED_RECEPCION_PASSWORD: ${SEED_RECEPCION_PASSWORD:-password123}
       # Cola y planificador (SHE-038): el entrypoint lanza en segundo plano
       # `queue:work` y `schedule:work` con reinicio automático. Ponga "false"
       # para desactivarlos (p. ej. al depurar con `php artisan queue:listen`).

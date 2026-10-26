@@ -46,9 +46,10 @@ Route::prefix('staff')->middleware('auth:sanctum')->group(function () {
         Route::post('/bookings/{code}/check-in', [BookingController::class, 'checkIn']);
         Route::post('/bookings/{code}/check-out', [BookingController::class, 'checkOut']);
 
-        // Reportes y caja
+        // Reportes y caja (SHE-014 / SHE-015)
         Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);
         Route::get('/reports/stats', [ReportStatsController::class, 'stats']);
+        Route::get('/reports/closures', [ReportController::class, 'closures']);
         Route::post('/reports/close-register', [ReportController::class, 'closeRegister']);
 
         // Catálogo de productos (lectura)

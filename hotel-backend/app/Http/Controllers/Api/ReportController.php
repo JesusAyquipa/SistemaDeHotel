@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\CashRegisterClosure;
 use App\Models\Payment;
 use App\Models\Room;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -244,6 +245,79 @@ class ReportController extends Controller
                 'counted_amount'  => (float) $closure->counted_amount,
                 'difference'      => (float) $closure->difference,
             ],
+        ]);
+    }
+
+    /**
+     * Historial de cierres de caja con filtros por empleado y fechas (SHE-015).
+     * GET /api/staff/reports/closures
+     */
+    public function closures(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_id'   => 'nullable|integer|exists:users,id',
+            'date_from' => 'nullable|date',
+            'date_to'   => 'nullable|date',
+            'status'    => 'nullable|in:all,balanced,discrepancy,surplus,deficit',
+        ]);
+
+        $query = CashRegisterClosure::with(['user:id,name,email'])
+            ->orderBy('closed_at', 'desc');
+
+        if (!empty($validated['user_id'])) {
+            $query->where('user_id', $validated['user_id']);
+        }
+
+        if (!empty($validated['date_from'])) {
+            $query->whereDate('closed_at', '>=', $validated['date_from']);
+        }
+
+        if (!empty($validated['date_to'])) {
+            $query->whereDate('closed_at', '<=', $validated['date_to']);
+        }
+
+        if (!empty($validated['status'])) {
+            if ($validated['status'] === 'balanced') {
+                $query->where('difference', 0);
+            } elseif ($validated['status'] === 'discrepancy') {
+                $query->where('difference', '!=', 0);
+            } elseif ($validated['status'] === 'surplus') {
+                $query->where('difference', '>', 0);
+            } elseif ($validated['status'] === 'deficit') {
+                $query->where('difference', '<', 0);
+            }
+        }
+
+        $closures = $query->paginate(20);
+
+        // Transformar para respuesta legible
+        $closures->getCollection()->transform(function ($c) {
+            return [
+                'id'              => $c->id,
+                'user_id'         => $c->user_id,
+                'staff_name'      => $c->user?->name ?? 'Usuario desconocido',
+                'staff_email'     => $c->user?->email,
+                'opened_at'       => $c->opened_at ? $c->opened_at->format('Y-m-d H:i') : null,
+                'closed_at'       => $c->closed_at->format('Y-m-d H:i'),
+                'expected_amount' => (float) $c->expected_amount,
+                'counted_amount'  => (float) $c->counted_amount,
+                'difference'      => (float) $c->difference,
+                'status'          => abs((float) $c->difference) < 0.01 ? 'balanced' : ((float) $c->difference > 0 ? 'surplus' : 'deficit'),
+                'notes'           => $c->notes,
+                'totals'          => $c->totals,
+                'created_at'      => $c->created_at->format('Y-m-d H:i'),
+            ];
+        });
+
+        // Empleados disponibles para el selector de filtros
+        $staffMembers = User::role(['admin', 'recepcionista'])
+            ->select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'closures'      => $closures,
+            'staff_members' => $staffMembers,
         ]);
     }
 }
