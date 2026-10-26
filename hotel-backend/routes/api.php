@@ -147,5 +147,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:admin');
 });
 
+// SHE-026: verificación de correo (OTP) para reservas sin cuenta
+Route::post('/booking-verification/send', [\App\Http\Controllers\Api\BookingVerificationController::class, 'send'])
+    ->middleware('throttle:booking-verification-send');
+Route::post('/booking-verification/verify', [\App\Http\Controllers\Api\BookingVerificationController::class, 'verify'])
+    ->middleware('throttle:10,1');
+
 // Rutas del panel de personal (/api/staff/*)
 require __DIR__ . '/api/staff.php';

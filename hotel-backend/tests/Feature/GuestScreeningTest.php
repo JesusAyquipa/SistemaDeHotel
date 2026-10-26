@@ -17,7 +17,7 @@ use Tests\TestCase;
  */
 class GuestScreeningTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, IssuesVerificationTokens;
 
     private User $receptionist;
     private User $admin;
@@ -133,7 +133,9 @@ class GuestScreeningTest extends TestCase
     {
         $this->guest->update(['is_blacklisted' => true, 'blacklist_reason' => 'Fraude']);
 
-        $this->postJson('/api/payments/checkout-intent', $this->bookingPayload())
+        $this->postJson('/api/payments/checkout-intent', $this->bookingPayload() + [
+            'verification_token' => $this->verificationTokenFor('pedro@example.com'),
+        ])
             ->assertStatus(422)
             ->assertJsonPath('message', 'No es posible procesar la reserva');
 
