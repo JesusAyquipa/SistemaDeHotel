@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import StaffLayout from '../../components/StaffLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Toast from '../../components/Toast';
@@ -17,6 +18,7 @@ import {
 import { apiErrorMessage } from '../../utils/apiError';
 import logError from '../../utils/logError';
 import GuestFlags from '../../components/staff/GuestFlags';
+import { roomAccountPath } from '../../utils/frontDesk';
 
 const startOfToday = () => {
   const d = new Date();
@@ -29,6 +31,7 @@ const dateOnly = (value) => new Date(`${String(value).substring(0, 10)}T00:00:00
 export default function ReceptionistBooking() {
   const { user } = useAuth();
   const isAdmin = user?.roles?.includes('admin');
+  const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [booking, setBooking] = useState(null);
@@ -276,6 +279,15 @@ export default function ReceptionistBooking() {
                 >
                   Realizar Check-Out
                 </button>
+                {booking.room?.id && (
+                  <Link
+                    to={`${roomAccountPath(isAdmin, booking.room.id)}?booking_id=${booking.id}`}
+                    className="inline-flex items-center justify-center gap-2 border border-[#14213D] text-[#14213D] font-mono text-sm font-medium px-6 py-3 uppercase tracking-widest hover:bg-[#14213D] hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(20,33,61,0.1)] active:translate-y-[1px] active:shadow-none"
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">receipt_long</span>
+                    Ver Folio / Cuenta
+                  </Link>
+                )}
               </div>
               {(canMarkNoShow() || booking.status === BOOKING_STATUS.CHECKED_OUT) && (
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -380,14 +392,20 @@ export default function ReceptionistBooking() {
         isOpen={!!checkoutDialog?.balanceMessage}
         title="Saldo pendiente"
         message={`${checkoutDialog?.balanceMessage || ''}${isAdmin ? '\n\nComo administrador puede forzar el check-out (quedará registrado).' : '\n\nRegistre el pago en la cuenta de la habitación antes del check-out.'}`}
-        confirmLabel={isAdmin ? 'Forzar Check-Out' : 'Entendido'}
+        confirmLabel={isAdmin ? 'Forzar Check-Out' : 'Ir a Cobrar a la Cuenta'}
         cancelLabel="Cerrar"
         variant={isAdmin ? 'danger' : 'default'}
         busy={actionBusy}
         onCancel={() => setCheckoutDialog(null)}
         onConfirm={() => {
-          if (isAdmin) performCheckOut({ reason: checkoutDialog?.reason, force: true });
-          else setCheckoutDialog(null);
+          if (isAdmin) {
+            performCheckOut({ reason: checkoutDialog?.reason, force: true });
+          } else {
+            setCheckoutDialog(null);
+            if (booking?.room_id) {
+              navigate(`${roomAccountPath(isAdmin, booking.room_id)}?booking_id=${booking.id}`);
+            }
+          }
         }}
       />
 

@@ -510,7 +510,7 @@ export default function FrontDeskRack() {
             <div className="mt-4 flex flex-wrap gap-2">
               {popCanCheckOut && (
                 <Link
-                  to={roomAccountPath(isAdmin, popover.room.id)}
+                  to={`${roomAccountPath(isAdmin, popover.room.id)}${popBooking?.id ? `?booking_id=${popBooking.id}` : ''}`}
                   className="inline-flex items-center gap-1 border border-[#d1c5af] hover:border-[#14213d] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-widest text-[#14213d]"
                 >
                   <span className="material-symbols-outlined text-sm" aria-hidden="true">receipt_long</span> Ver cuenta

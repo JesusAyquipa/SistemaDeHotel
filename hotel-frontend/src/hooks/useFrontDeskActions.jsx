@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { checkInBooking, checkOutBooking } from '../services/frontDeskService';
 import { apiErrorMessage } from '../utils/apiError';
 import logError from '../utils/logError';
+import { roomAccountPath } from '../utils/frontDesk';
 
 const todayYmd = () => {
   const d = new Date();
@@ -17,6 +19,7 @@ const todayYmd = () => {
  * @returns {{ checkIn: Function, checkOut: Function, busyCode: string|null, dialogs: JSX.Element }}
  */
 export default function useFrontDeskActions({ isAdmin, notify, onDone }) {
+  const navigate = useNavigate();
   const [busyCode, setBusyCode] = useState(null);
   // { booking, requireReason?, balanceMessage?, reason? }
   const [checkoutDialog, setCheckoutDialog] = useState(null);
@@ -98,14 +101,21 @@ export default function useFrontDeskActions({ isAdmin, notify, onDone }) {
         isOpen={!!checkoutDialog?.balanceMessage}
         title="Saldo pendiente"
         message={`${checkoutDialog?.balanceMessage || ''}${isAdmin ? '\n\nComo administrador puede forzar el check-out (quedará registrado).' : '\n\nRegistre el pago en la cuenta de la habitación antes del check-out.'}`}
-        confirmLabel={isAdmin ? 'Forzar Check-Out' : 'Entendido'}
+        confirmLabel={isAdmin ? 'Forzar Check-Out' : 'Ir a Cobrar a la Cuenta'}
         cancelLabel="Cerrar"
         variant={isAdmin ? 'danger' : 'default'}
         busy={!!busyCode}
         onCancel={() => setCheckoutDialog(null)}
         onConfirm={() => {
-          if (isAdmin) performCheckOut(dialogBooking, { reason: checkoutDialog?.reason, force: true });
-          else setCheckoutDialog(null);
+          if (isAdmin) {
+            performCheckOut(dialogBooking, { reason: checkoutDialog?.reason, force: true });
+          } else {
+            const b = dialogBooking;
+            setCheckoutDialog(null);
+            if (b?.room?.id) {
+              navigate(`${roomAccountPath(isAdmin, b.room.id)}?booking_id=${b.id}`);
+            }
+          }
         }}
       />
       <ConfirmDialog

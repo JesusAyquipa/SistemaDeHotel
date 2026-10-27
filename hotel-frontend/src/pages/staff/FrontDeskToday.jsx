@@ -119,7 +119,7 @@ function BookingCard({ booking, column, isAdmin, busy, onCheckIn, onCheckOut, on
           )
         )}
         {(column === 'departures' || column === 'in_house') && booking.room && (
-          <Link to={roomAccountPath(isAdmin, booking.room.id)} className={`${btnBase} border border-[#d1c5af] text-[#14213d] hover:border-[#14213d]`}>
+          <Link to={`${roomAccountPath(isAdmin, booking.room.id)}?booking_id=${booking.id}`} className={`${btnBase} border border-[#d1c5af] text-[#14213d] hover:border-[#14213d]`}>
             <span className="material-symbols-outlined text-sm" aria-hidden="true">receipt_long</span> Ver cuenta
           </Link>
         )}

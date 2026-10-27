@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import StaffLayout from '../../components/StaffLayout';
 import { getRoomDetails } from '../../services/roomStaffService';
 import AddChargeModal from '../../components/staff/AddChargeModal';
@@ -9,7 +9,12 @@ import IssueInvoiceModal from '../../components/staff/IssueInvoiceModal';
 import api from '../../services/api';
 import formatCurrency, { includedIgv } from '../../utils/formatCurrency';
 import { nightsBetween } from '../../utils/dates';
-import { ACTIVE_STATUSES } from '../../utils/bookingStatus';
+import {
+  ACTIVE_STATUSES,
+  BOOKING_STATUS,
+  bookingStatusLabel,
+  bookingStatusBadge,
+} from '../../utils/bookingStatus';
 import { apiErrorMessage } from '../../utils/apiError';
 import logError from '../../utils/logError';
 
@@ -48,6 +53,7 @@ function computeTotals(booking, charges, payments, serverTotals) {
 
 export default function RoomAccount() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [room, setRoom] = useState(null);
   const [activeBooking, setActiveBooking] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +85,13 @@ export default function RoomAccount() {
     }
   }, []);
 
+  const handleSelectBooking = async (b) => {
+    if (!b || b.id === activeBooking?.id) return;
+    setActiveBooking(b);
+    setSearchParams({ booking_id: b.id }, { replace: true });
+    await loadFolio(b.id);
+  };
+
   useEffect(() => {
     let cancelled = false;
     const fetchRoom = async () => {
@@ -88,9 +101,33 @@ export default function RoomAccount() {
         const data = await getRoomDetails(id);
         if (cancelled) return;
         setRoom(data.room);
-        const booking = (data.room?.bookings || []).find((b) => ACTIVE_STATUSES.includes(b.status)) || null;
-        setActiveBooking(booking);
-        if (booking) await loadFolio(booking.id);
+
+        const bookingsList = data.room?.bookings || [];
+        const queryBookingId = searchParams.get('booking_id');
+        const queryBookingCode = searchParams.get('booking_code');
+
+        let target = null;
+        if (queryBookingId) {
+          target = bookingsList.find((b) => String(b.id) === String(queryBookingId)) || null;
+        } else if (queryBookingCode) {
+          target = bookingsList.find((b) => b.booking_code === queryBookingCode) || null;
+        }
+
+        if (!target) {
+          // Prioridad:
+          // 1. Huésped actualmente en la habitación (checked_in)
+          // 2. Próxima reserva confirmada activa (confirmed)
+          // 3. Cualquier estado activo
+          // 4. Primera reserva disponible
+          target = bookingsList.find((b) => b.status === BOOKING_STATUS.CHECKED_IN)
+            || bookingsList.find((b) => b.status === BOOKING_STATUS.CONFIRMED)
+            || bookingsList.find((b) => ACTIVE_STATUSES.includes(b.status))
+            || bookingsList[0]
+            || null;
+        }
+
+        setActiveBooking(target);
+        if (target) await loadFolio(target.id);
       } catch (err) {
         logError('folio:room', err);
         if (!cancelled) setLoadError(apiErrorMessage(err, 'No se pudo cargar la habitación.'));
@@ -209,14 +246,67 @@ export default function RoomAccount() {
       </div>
 
       <main className="px-4 md:px-10 pb-10 flex flex-col lg:flex-row gap-10">
-        {/* Panel Izquierdo: Resumen de Huésped */}
+        {/* Panel Izquierdo: Resumen de Huésped y Selector de Reservas */}
         <div className="w-full lg:w-1/3 flex flex-col gap-6">
+          {/* Si la habitación tiene múltiples reservas, mostrar selector rápido */}
+          {room.bookings && room.bookings.length > 1 && (
+            <div className="bg-white p-5 shadow-sm border border-gray-200">
+              <h2 className="font-serif text-sm font-bold text-[#2d2d2a] mb-2 uppercase tracking-wide border-b border-gray-100 pb-1">
+                Reservas de la Habitación ({room.bookings.length})
+              </h2>
+              <p className="font-mono text-[11px] text-[#78716c] mb-3">
+                Seleccione la reserva a consultar o cobrar:
+              </p>
+              <div className="flex flex-col gap-2">
+                {room.bookings.map((b) => {
+                  const isSelected = activeBooking?.id === b.id;
+                  const guestName = b.guest ? `${b.guest.name} ${b.guest.surname}` : 'Sin Huésped';
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => handleSelectBooking(b)}
+                      className={`text-left p-3 border transition-all text-xs font-mono flex flex-col gap-1 cursor-pointer ${
+                        isSelected
+                          ? 'border-[#987d35] bg-[#987d35]/10 shadow-sm font-bold'
+                          : 'border-gray-200 hover:border-[#987d35]/40 hover:bg-[#faf9f5] bg-white'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="text-[#2d2d2a] truncate">{guestName}</span>
+                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border shrink-0 ${bookingStatusBadge(b.status)}`}>
+                          {bookingStatusLabel(b.status)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[#78716c] text-[11px]">
+                        <span>{b.booking_code}</span>
+                        <span>{String(b.check_in).substring(5, 10)} al {String(b.check_out).substring(5, 10)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-6 shadow-sm border border-gray-200">
             <h2 className="font-serif text-xl font-bold text-[#2d2d2a] mb-4 border-b border-gray-200 pb-2">
               Resumen de Huésped
             </h2>
 
             <div className="space-y-4 font-mono text-xs">
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-[#a39f96] tracking-widest uppercase font-bold">Reserva</span>
+                <span className="font-bold text-sm text-[#2d2d2a] text-right">
+                  {activeBooking?.booking_code || '--'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-[#a39f96] tracking-widest uppercase font-bold">Estado</span>
+                <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${bookingStatusBadge(activeBooking?.status)}`}>
+                  {bookingStatusLabel(activeBooking?.status)}
+                </span>
+              </div>
               <div className="flex justify-between items-center gap-2">
                 <span className="text-[#a39f96] tracking-widest uppercase font-bold">Nombre</span>
                 <span className="font-bold text-sm text-[#2d2d2a] text-right">
