@@ -8,7 +8,7 @@
 */
 
 return [
-    'name'    => env('HOTEL_NAME', 'Hotel Demo'),
+    'name'    => env('HOTEL_NAME', 'Hotel Sheraton'),
     'ruc'     => env('HOTEL_RUC', '00000000000'),
     'address' => env('HOTEL_ADDRESS', 'Lima, Perú'),
     'phone'   => env('HOTEL_PHONE', '+51 1 000-0000'),

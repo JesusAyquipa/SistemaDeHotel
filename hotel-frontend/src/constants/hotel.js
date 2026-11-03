@@ -1,4 +1,4 @@
-export const HOTEL_NAME = import.meta.env.VITE_HOTEL_NAME || 'Hotel Demo';
+export const HOTEL_NAME = import.meta.env.VITE_HOTEL_NAME || 'Hotel Sheraton';
 
 // Datos del emisor para comprobantes internos (el backend envía los valores de config/hotel.php;
 // estos son solo el respaldo si la respuesta no los incluye).

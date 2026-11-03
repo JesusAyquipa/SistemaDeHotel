@@ -10,7 +10,8 @@ import { EMPTY_CARD, validateCard, cardPayload } from '../../utils/card';
 import { validateCoupon, couponDiscount } from '../../utils/coupon';
 import { apiErrorMessage, apiStatus } from '../../utils/apiError';
 import formatCurrency from '../../utils/formatCurrency';
-import { nightsBetween } from '../../utils/dates';
+import { nightsBetween, todayYmd } from '../../utils/dates';
+import { addDaysYmd } from '../../utils/frontDesk';
 import logError from '../../utils/logError';
 import useEscapeKey from '../../hooks/useEscapeKey';
 
@@ -48,7 +49,7 @@ function updateErrorMessage(err) {
   return apiErrorMessage(err, 'Error al guardar los cambios de la reserva.');
 }
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = todayYmd;
 
 /**
  * Modal de reservas para el personal.
@@ -533,7 +534,14 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
                   required
                   value={checkIn}
                   min={isEdit ? undefined : today()}
-                  onChange={(e) => { setCheckIn(e.target.value); setServerRequiresPayment(null); }}
+                  onChange={(e) => {
+                    const newIn = e.target.value;
+                    setCheckIn(newIn);
+                    setServerRequiresPayment(null);
+                    if (checkOut && newIn && checkOut <= newIn) {
+                      setCheckOut(addDaysYmd(newIn, 1));
+                    }
+                  }}
                   className={`${inputClass} font-sans appearance-none`}
                 />
               </div>
@@ -544,7 +552,7 @@ export default function EditBookingModal({ isOpen, onClose, onSuccess, booking =
                   type="date"
                   required
                   value={checkOut}
-                  min={checkIn || today()}
+                  min={checkIn ? addDaysYmd(checkIn, 1) : today()}
                   onChange={(e) => { setCheckOut(e.target.value); setServerRequiresPayment(null); }}
                   className={`${inputClass} font-sans appearance-none`}
                 />

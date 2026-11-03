@@ -6,7 +6,7 @@ import { getStaffMembers } from '../../services/staffService';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { apiErrorMessage } from '../../utils/apiError';
 import formatCurrency from '../../utils/formatCurrency';
-import { formatDateTime } from '../../utils/dates';
+import { formatDateTime, todayYmd } from '../../utils/dates';
 import { downloadCsv } from '../../utils/csv';
 import logError from '../../utils/logError';
 
@@ -250,7 +250,7 @@ export default function CashSessionHistory() {
         num(r.difference),
         r.notes || '',
       ]);
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayYmd();
       downloadCsv(`historial-cajas-${stamp}.csv`, [header, ...body]);
       setToast({ type: 'success', message: `Exportadas ${rows.length} cajas.` });
     } catch (err) {

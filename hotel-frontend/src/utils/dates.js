@@ -6,6 +6,11 @@ export function toYmd(date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/** Fecha de hoy en formato 'YYYY-MM-DD' en hora local. */
+export function todayYmd() {
+  return toYmd(new Date());
+}
+
 /** Noches entre dos fechas 'YYYY-MM-DD' (0 si el rango es inválido). */
 export function nightsBetween(checkIn, checkOut) {
   if (!checkIn || !checkOut) return 0;

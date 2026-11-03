@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getProducts } from '../../services/productService';
 import formatCurrency from '../../utils/formatCurrency';
+import { todayYmd } from '../../utils/dates';
 import logError from '../../utils/logError';
 import useEscapeKey from '../../hooks/useEscapeKey';
 
@@ -119,7 +120,7 @@ export default function AddChargeModal({ isOpen, onClose, onAddCharge }) {
 
     setSubmitting(true);
     const ok = await onAddCharge({
-      date: new Date().toISOString().split('T')[0],
+      date: todayYmd(),
       product_id: selectedProductId,
       concept: `${category} - ${product}`,
       quantity: Math.max(1, parseInt(quantity, 10) || 1),

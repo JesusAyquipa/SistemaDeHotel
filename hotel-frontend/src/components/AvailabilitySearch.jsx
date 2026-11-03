@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { todayYmd } from '../utils/dates';
 
 export default function AvailabilitySearch({ searchParams, onSearch, loading }) {
   const [dates, setDates] = useState({
@@ -8,8 +9,8 @@ export default function AvailabilitySearch({ searchParams, onSearch, loading }) 
   });
   const [dateError, setDateError] = useState('');
 
-  // Fecha de hoy en formato YYYY-MM-DD para el atributo min
-  const today = new Date().toISOString().split('T')[0];
+  // Fecha de hoy en formato YYYY-MM-DD en hora local
+  const today = todayYmd();
 
   const handleChange = (e) => {
     const { name, value } = e.target;

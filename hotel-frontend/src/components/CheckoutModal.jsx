@@ -19,7 +19,7 @@ import { validateCoupon, couponDiscount } from '../utils/coupon';
 import { roomImage as getRoomImage } from '../constants/rooms';
 import formatCurrency from '../utils/formatCurrency';
 import { apiErrorMessage, apiStatus } from '../utils/apiError';
-import { toYmd, nightsBetween } from '../utils/dates';
+import { toYmd, todayYmd, nightsBetween } from '../utils/dates';
 import logError from '../utils/logError';
 import useEscapeKey from '../hooks/useEscapeKey';
 
@@ -96,10 +96,10 @@ export default function CheckoutModal({
   useEffect(() => () => clearInterval(intervalRef.current), []);
 
   // ===== Fechas =====
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayYmd();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomorrowStr = toYmd(tomorrow);
 
   const [dates, setDates] = useState({
     check_in: initialDates.check_in || todayStr,
