@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained('users')->restrictOnDelete();
             $table->timestamp('opened_at')->nullable();
-            $table->timestamp('closed_at');
+            $table->dateTime('closed_at');
             $table->json('totals');
             $table->decimal('expected_amount', 12, 2)->default(0);
             $table->decimal('counted_amount', 12, 2)->default(0);

@@ -144,6 +144,11 @@ class DatabaseSeeder extends Seeder
                 $item
             );
         }
+
+        // 7. DATOS DEMO COMPLETOS (reservas en todos los estados, pagos, consumos, etc.)
+        if (app()->environment('local')) {
+            $this->call([DemoDataSeeder::class]);
+        }
     }
 
     /**

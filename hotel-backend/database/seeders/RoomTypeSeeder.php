@@ -22,37 +22,37 @@ class RoomTypeSeeder extends Seeder
                 'name' => 'Individual', 'base_price' => 180.00, 'capacity' => 1, 'bed_type' => 'individual',
                 'description' => 'Habitaciones individuales ideales para viajeros solos o de negocios.',
                 'amenities' => [...self::BASE, 'desk'],
-                'rooms' => ['101', '108'],
+                'rooms' => ['101', '102', '103', '104', '108'],
             ],
             'doble' => [
                 'name' => 'Doble', 'base_price' => 280.00, 'capacity' => 2, 'bed_type' => 'doble',
                 'description' => 'Habitaciones dobles clásicas con todo el confort del hotel.',
                 'amenities' => [...self::BASE, 'minibar'],
-                'rooms' => ['202'],
+                'rooms' => ['201', '202', '203', '204', '205'],
             ],
             'deluxe-king' => [
                 'name' => 'Deluxe King', 'base_price' => 320.00, 'capacity' => 2, 'bed_type' => 'king',
                 'description' => 'Habitaciones de lujo con cama king size.',
                 'amenities' => [...self::BASE, 'minibar', 'coffee', 'bathrobe'],
-                'rooms' => ['214'],
+                'rooms' => ['214', '301', '302', '304', '402'],
             ],
             'familiar' => [
                 'name' => 'Familiar', 'base_price' => 360.00, 'capacity' => 4, 'bed_type' => 'doble',
                 'description' => 'Amplias habitaciones para familias o grupos pequeños.',
                 'amenities' => [...self::BASE, 'minibar', 'living_room'],
-                'rooms' => ['115'],
+                'rooms' => ['105', '106', '115'],
             ],
             'suite' => [
                 'name' => 'Suite', 'base_price' => 450.00, 'capacity' => 2, 'bed_type' => 'king',
                 'description' => 'Suites con sala de estar, vistas y servicios premium.',
                 'amenities' => [...self::BASE, 'minibar', 'coffee', 'bathrobe', 'bathtub', 'living_room', 'view'],
-                'rooms' => ['303', '418'],
+                'rooms' => ['303', '305', '401', '403', '418'],
             ],
             'penthouse' => [
                 'name' => 'Penthouse', 'base_price' => 1200.00, 'capacity' => 4, 'bed_type' => 'king',
                 'description' => 'La experiencia más exclusiva del hotel, con terraza y mayordomo.',
                 'amenities' => [...self::BASE, 'minibar', 'coffee', 'bathrobe', 'bathtub', 'living_room', 'view', 'balcony', 'butler'],
-                'rooms' => ['500'],
+                'rooms' => ['500', '501'],
             ],
         ];
 
