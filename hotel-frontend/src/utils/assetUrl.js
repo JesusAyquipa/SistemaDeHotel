@@ -18,5 +18,8 @@ export default function assetUrl(path) {
   if (!path) return '';
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
   const normalized = path.startsWith('/') ? path : `/${path}`;
+  if (normalized.startsWith('/images/')) {
+    return normalized;
+  }
   return `${BACKEND_ORIGIN}${normalized}`;
 }

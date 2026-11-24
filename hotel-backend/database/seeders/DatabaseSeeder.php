@@ -147,7 +147,7 @@ class DatabaseSeeder extends Seeder
 
         // 7. DATOS DEMO COMPLETOS (reservas en todos los estados, pagos, consumos, etc.)
         if (app()->environment('local')) {
-            $this->call([DemoDataSeeder::class]);
+            $this->call([DemoDataSeeder::class, RefundDemoSeeder::class]);
         }
     }
 

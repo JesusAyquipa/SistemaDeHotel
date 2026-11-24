@@ -2,10 +2,10 @@ import assetUrl from '../utils/assetUrl';
 
 // Imágenes por defecto si la habitación no tiene imagen propia.
 export const DEFAULT_ROOM_IMAGES = {
-  individual: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
-  doble: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=800&q=80',
-  king: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-  default: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
+  individual: '/images/rooms/photo-1590490360182-c33d57733427.jpg',
+  doble: '/images/rooms/photo-1566665797739-1674de7a421a.jpg',
+  king: '/images/rooms/photo-1582719478250-c89cae4dc85b.jpg',
+  default: '/images/rooms/photo-1618773928121-c32242e63f39.jpg',
 };
 
 /** Imágenes de la galería ordenadas (principal primero). SHE-035 */

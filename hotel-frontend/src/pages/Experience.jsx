@@ -13,7 +13,7 @@ export default function Experience() {
             <img
               alt="Experiencias Curadas"
               className="w-full h-full object-cover opacity-60 mix-blend-luminosity"
-              src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&q=80&w=2070"
+              src="/images/rooms/photo-1571896349842-33c89424de2d.jpg"
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-on-secondary-fixed via-transparent to-transparent opacity-80"></div>

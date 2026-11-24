@@ -14,7 +14,7 @@ export default function Home() {
         <div
           className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] hover:scale-105"
           style={{
-            backgroundImage: "url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?auto=format&fit=crop&w=1920&q=80')",
+            backgroundImage: "url('/images/rooms/photo-1551882547-ff40c63fe5fa.jpg')",
             backgroundPosition: 'center 40%'
           }}
         >
@@ -66,7 +66,7 @@ export default function Home() {
           </div>
           <div className="relative h-[500px]">
             <img
-              src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1000&q=80"
+              src="/images/rooms/photo-1542314831-068cd1dbfeeb.jpg"
               alt={`Fachada de ${HOTEL_NAME}`}
               className="absolute inset-0 w-full h-full object-cover shadow-2xl"
             />

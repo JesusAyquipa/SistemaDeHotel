@@ -103,7 +103,7 @@ export default function RoomsListing() {
               className="absolute inset-2 bg-cover bg-center"
               style={{
                 backgroundImage:
-                  "url('https://images.weserv.nl/?url=images.unsplash.com/photo-1542314831-068cd1dbfeeb&w=1600&q=80&fit=cover')",
+                  "url('/images/rooms/photo-1542314831-068cd1dbfeeb.jpg')",
               }}
             />
             <div className="absolute inset-2 bg-[#14213d] opacity-40" />

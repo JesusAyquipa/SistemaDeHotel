@@ -269,7 +269,7 @@ class DemoDataSeeder extends Seeder
         [$paymentStatus, $method] = match (true) {
             $status === 'pending_payment' => ['pending', 'card'],
             $status === 'expired' => ['failed', 'card'],
-            $status === 'cancelled' => ['refunded', 'card'],
+            $status === 'cancelled' => ['completed', 'card'], // el reembolso (negativo) lo crea RefundDemoSeeder
             !empty($extra['cash_later']) => ['pending', 'cash_later'],
             default => ['completed', 'card'],
         };
